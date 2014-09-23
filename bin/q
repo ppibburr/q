@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+
+begin
+  require 'q'
+rescue LoadError
+  $: << File.dirname(File.dirname(__FILE__)) + '/lib'
+  require 'q'
+end
+
+code = File.read(ARGV[0])
+
+out = Q.translate(code)
+
+puts out
