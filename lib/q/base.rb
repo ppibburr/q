@@ -1,214 +1,402 @@
 module Q
-	class Base
-	  attr_accessor :last_infered_type
-	  attr_reader :sexp, :lvars, :ident
-	  def initialize buff, sexp, ident = 0
+  DECLARE_TYPED = [
+    :int,
+    :uint,
+    :float,
+    :char,
+    :string,
+    :long,
+    :ulong,
+    :double,
+    :bool,
+    :struct,
+    :enum
+  ]
+  
+  def declare_assign q
+  
+  end
+
+  class Value
+    attr_accessor :type, :string, :buff
+    attr_reader :sexp, :parent, :ident    
+    def initialize sexp, parent, ident = nil
+      @ident = ident ? ident : (parent ? parent.ident : ident)
       @sexp = sexp
-      @ident = ident
+      @parent = parent
+      
+      @buff = @parent.buff
+      
+      @type = sexp[0]
+      @string = sexp[1]
+    end 
+    
+    def write;
+      if type == :"@tstring_content"
+        bool_str = true
+        buff << "\""
+      elsif type == :"@ivar"
+        buff << "this."
+        bool_ivar = true
+      end
+      
+      @buff << (bool_ivar ? @string.gsub(/^\@/,'') : @string)
+      
+      if bool_str
+        buff << "\""
+      end
+    end
+  end
+
+  class NonArray
+    attr_reader :sexp, :parent, :buff
+    def initialize sexp, parent
+      @sexp = sexp
+      @parent = parent
+      @buff = parent.buff
+    end
+    
+    def write
+      @buff << @sexp.to_s
+    end
+  end
+
+  class Base
+    attr_reader :sexp, :parent, :ident, :children, :buff
+    def initialize sexp, parent, ident = nil
+      @ident = ident ? ident : (parent ? parent.ident : 0)
+      @sexp = sexp
+      @parent = parent
+    
+      @buff = parent ? parent.buff : []
+    
+      @children = []
+    
+      init
+      
+      perform
+    end
+
+    def x(str)
+      buff << "#{" "*(ident)}"+str
+    end
+    
+    def init
+    
+    end
+    
+    def to_s
+    
+    end
+    
+    def perform
+      sexp[1..-1].each do |s| children << build_q(s) end  
+    end
+    
+    def write &b
+      children.each do |c|
+        c.write
+        b.call(c) if b
+      end
+    end
+    
+    def build_q q
+      if !q.is_a?(Array)
+        NonArray.new(q, self)
+      elsif q[0].to_s =~ /^\@/
+        Value.new(q, self)
+      else; p q[0]
+        case q[0]
+        when :assign
+          Assign.new q, self
+        when:var_field
+          VarField.new q, self
+        when :program
+          Program.new q, self
+        when :method_add_arg
+          MethodAddArg.new(q, self)
+        when :args_add_block
+          ArgsAddBlock.new q,self
+        when :def
+          Def.new q,self
+        when :params
+          Params.new(q,self)
+        when :binary
+          Binary.new q,self
+        when :paren
+          build_q q[1]
+        when :return
+          Return.new(q,self)
+        when :call
+          Call.new q,self
+        when :fcall
+          FCall.new(q,self)
+        
+        else
+          Base.new q,self
+        end
+      end
+    end
+  end
+  
+  module HasMany
+    def perform
+      sexp[1].each do |s|
+        children << build_q(s)
+      end
+    end
+  end
+  
+  class Binary < Base
+    def write
+      children.each_with_index do |c,i|
+        c.write
+        buff << " " unless i == children.length-1
+      end
+    end
+  end
+  
+  class Body < Base
+    include HasMany
+    
+    attr_reader :lvars
+    def initialize *o
       @lvars = {}
-      @buff = buff
+      super
+    end    
+    
+    def perform
+      @ident += 2
+      super
+    end    
+    
+    def write &b
+      children.each do |c|
+        x(" "*ident)
+        c.write
       
-      if sexp[1].is_a?(Array)
-        sexp[1].each do |q|
-          build_ksexp(q)
-          next_sexp
+        if !c.is_a?(Body)
+          @buff << ";"
+        end
+        
+        @buff << "\n"
+        
+        b.call if b
+      end
+    end
+  end
+  
+  class FCall < Base
+    def write
+      super
+      if buff.last == "puts"
+        buff.last.replace "stdout.printf"
+        return :puts      
+      end
+    end
+  end
+  
+  class Program < Body
+  end  
+  
+  class MethodAddArg < Base    
+    def write
+      n = @children[0].write
+      @buff << "("
+      if n == :puts and c=children[1].children[0].children[0]
+        def c.write
+          super
+          buff << "+\"\\n\""
         end
       end
-	  end
-	  
-	  def newline(i=-1)
-      @buff[i] ? @buff[i] << "\n" : nil
-	  end
-	  
-	  def next_sexp
-	  
-	  end
-	  
-	  def build_ksexp ss, ident=@ident
-      case ss[0]
-      when :class
-        begin
-          sc = ss[2][1][1]
-        rescue;end
-        
-        @buff << "class #{ss[1][1][1]}#{sc ? " : #{sc}" : ""} {"
-        newline
-        
-        k = Q::Class.new(@buff, ss[3], ident+2)
-        @buff << "}"
-        newline
       
-      when :assign
-        case ss[1][0]
-        when :var_field
-          case ss[1][1][0]
-          when :"@ident"
-            if lvars[ss[1][1][1]]
+      @children[1].write
+      @buff << ")"
+    end
+  end
+ 
+  class VarField < Base
+    def write
+      children[0].write
+    end
+  end
+  
+  class Assign < Base
+    def perform
+      super
+      if children[0].children[0].type == :"@ident"
+        parent.lvars[children[0].children[0].string] ||= [children[1], false]
+      end
+    end
+  
+    def write
+      bool = parent.lvars[children[0].children[0].string] ? !parent.lvars[children[0].children[0].string][1] : false
+      parent.lvars[children[0].children[0].string][1] = true if parent.lvars[children[0].children[0].string]
+      @buff << "var " if bool
+      children[0].write
+      @buff << " = "
+      write_right(bool)
+    end
+    
+    def write_right bool
+      if children[1].is_a?(MethodAddArg)
+      
+        if children[1].sexp[1][0] == :fcall;
+          q = children[1].children[1]
+          n =  children[1].children[0].children[0].sexp[1]
+          if Q::DECLARE_TYPED.index(n.to_sym)
+            if bool
+              buff << "(#{n}) "
+              q.write
             else
-              @buff << "#{" "*ident}var "
+              children[1].write
             end
+          else
+            children[1].write
           end
-        else
-      
         end
-        
-        build_ksexp ss[1][1],0
-        
-        @buff << " = "
-
-        if ss[2].last[1] == "new"
-          ss[2][-1][1] = ""
-          ss[2][-2] == ""
-          @buff << "new "
-        elsif ss[2][0] == :method_add_arg and ss[2][1].last[1] == "new"
-          ss[2][1][-1][1] = ""
-          ss[2][1][-2] = ""        
-          @buff << "new "
-        end
-        
-        o = @ident
-        @ident = 0      
-        build_ksexp ss[2],0
-        @ident = o
-      when :command
-        raise "TODO: :command"
-      when :fcall
-        if ss[1][1] == "printf"
-          ss[1][1] = "stdout.printf"
-        
-        elsif ss[1][1] == "print"
-          ss[1][1] = "stdout.printf"
-        end        
-
-        @buff << (" "*ident)+ss[1][1]
-      when :vcall
-        @buff << (" "*ident)+ss[1][1]
-      when :call
-        build_ksexp ss[1]
-
-        n = @buff.length-1
-        @buff[n] = @buff[n].gsub(";",'')
-        @buff[n] += "#{ss[2]}"+ss[3][1]
-      when :string_literal
-        @buff << "\"#{ss[1][1][1]}\""
-      when :args_add_block
-        ss[1].each_with_index do |a,i|
-          build_ksexp(a,0)
-          @buff.last << "," unless i == ss[1].length-1
-        end
-      when :paren
-        @buff.last << "("
-        
-        ss[1].each do |s|
-          build_ksexp s,0
-        end
-        
-        @buff.last << ")"
-      when :method_add_arg
-        build_ksexp ss[1]
-        build_ksexp ss[2]
-      when :arg_paren
-        @buff << "("
-        build_ksexp(ss[1], 0) if ss[1]
-        @buff << ")"
-      when :def
-        @buff << ""
-        q = @buff.length-1
-        
-        if ss[2][0][0] == :paren
-          ss[2][0] = ss[2][0][1]
-        end
-        
-        m = Q::Method.new(@buff, ss[2], ss[3],ident+2)
-        t = m.explicit_return_type || m.last_infered_type
-        w = []
-        
-        m.arg_names.each_with_index do |n,i|
-          w << "#{m.arg_types[i]} #{n}"
-        end
-        
-        @buff[q] = "#{" "*ident}public #{t} #{ss[1][1]} (#{w.join(", ")}) {"
-        newline(q)
-        
-        @buff << "#{" "*ident}}"  
-        newline  
-      when :var_ref
-        q = ss[1][1]
-        q == "self" ? "this" : q
-        @buff << "#{" "*ident}#{q};"
-      when :return
-        @buff << "#{" "*ident}return "
-        build_ksexp ss[1],0
-      when :binary
-        binary(ss)
       else
-        if ss[0].is_a?(Array)
-          build_ksexp(ss[0],0)
-        elsif ss[0] =~ /^\@/
-          @buff << ss[1]
-        end
+        children[1].write
       end
-	  end
-	  
-	  def binary s
-      s.shift
-      s.each_with_index do |q,i|
-        if i.even?
-          build_ksexp q,0
+    end
+  end
+  
+  class Klass < Body
+    def init
+    
+    end
+  end
+  
+  class self::SArray
+    include HasMany
+  end
+  
+  class Def < Body
+    attr_reader :name, :params
+    def init
+      n = @sexp.delete_at(3)
+      d = @sexp
+      @name = d[1][1]
+      @params = build_q(d[2])
+      @sexp = n
+    end
+    
+    def write
+      @ident -= 3
+      x("\npublic type #{name}(")
+      params.write
+      buff << ") {\n"
+      super
+      @ident -= 1
+      x("}\n")
+    end
+  end
+  
+  class Param < Base
+    attr_reader :name, :type
+    def perform
+      super
+      @type = children[1]
+      @name = children[0]
+    end
+    
+    def write
+      type.write
+      buff << " "
+      name.write
+      buff.last.gsub!(":",'')
+    end
+  end
+  
+  class Call < Base
+    def write
+      target = sexp[1]
+      what = sexp[3]
+      if target[0].to_s =~ /\@float|\@int/
+        if ["d","f"].index(what[1])
+          buff << "#{target[1]}#{what[1]}"
         else
-          @buff.last << " #{q} "
+         super
         end
+      else
+        super
       end
-	  end
-	end
-
-	class Body < Base
-	  def next_sexp
-      @buff.last << ";" unless @buff.empty? or @buff.last[-1] == "\n"
-      newline
-	  end
-	end
-
-	class Program < Body
-	end
-
-	class Q::Method < Body
-	  attr_reader :two
-	  attr_reader :infered_return_type
-	  attr_reader :explicit_return_type
-	  attr_reader :arg_types
-	  attr_reader :arg_names
-    def initialize buff, two, sexp, ident=0
-      @buff = buff
-      @two = two
-      @arg_types = []
-      @arg_names = []
-      n = two.find do |q| q.is_a?(Array) end
-
-      if sexp[1][0].is_a?(Array) and sexp[1][0][0] == :symbol_literal
-        rt = sexp[1].shift
-        @explicit_return_type = rt[1][1][1]
+    end
+  end
+  
+  class Params < Base
+    def perform
+      sexp[5].each do |q|
+        children << Param.new([:param].push(*q), self)
       end
-      
-      n[5].each do |l|
-        raise unless l[0][0] == :"@label"
-        t = l[0][1].gsub(":",'')
-        arg_types << t
-        arg_names << l[1][1][1] 
-      end if n[5]
-     
-      super buff, sexp, ident
-	  end
-	end
-
-	class Class < Body
-
-	end
+    end
+    
+    def write
+      children.each_with_index do |c,i|
+        c.write
+        buff << ", " unless i == children.length - 1
+      end;
+    end
+  end
+  
+  class Return < Base
+    def init
+      if sexp[1][0] == :args_add_block and sexp[1][1][0][0] == :paren
+        sexp[1][1] = sexp[1][1][0][1]
+      end
+    end
+    
+    def write
+      buff << "return ("
+      super
+      buff << ")"
+    end
+  end
+  
+  class ArgsAddBlock < Base
+    include HasMany
+    
+    def init
+      @b = sexp.pop if sexp.last == false
+    end
+    
+    def write
+      children.each_with_index do |c, i|
+        c.write
+        @buff << ", " unless i == children.length-1
+      end
+    end
+  end
   
   def self.translate code
-    Q::Program.new(out = [],Ripper::sexp(code))
-    out.join
+    sexp = Ripper::sexp(code)
+    if __FILE__ == $0
+      PP.pp sexp[1]
+    end    
+    prog = Q::Program.new(sexp,nil)
+    prog.write
+    prog.buff.join
   end
 end
 
-
+if __FILE__ == $0
+require 'pp'
+code = "
+def n(x:int)
+  this.p(1,2)
+  this.p(1,2)
+  a = 1
+  a = 3
+  a
+  i = char(5)
+  i = foo(4)
+  n = \"fred\"
+  z = 0.0.d
+  puts(\"%f\",z)
+  return(@foo)
+  55.d / 44.0.f
+  @foo = 5
+end
+"
+puts Q.translate(code)
+end
