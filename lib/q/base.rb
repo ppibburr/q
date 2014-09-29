@@ -111,7 +111,7 @@ module Q
     end
 
     def x(str)
-      buff << "#{" "*(ident)}"+str
+      buff << "#{" "*(ident < 0 ? 0 : ident)}"+str
     end
     
     def init
@@ -179,6 +179,9 @@ module Q
           FCall.new(q,self)
         when :aref
           ARef.new(q,self)
+        when :do_block
+          Block.new q,self
+         
         else
           Base.new q,self
         end
@@ -226,17 +229,37 @@ module Q
     attr_reader :lvars
     def initialize *o
       @lvars = {}
+      @next_def_flags = []
       super
     end    
     
     def perform
       @ident += 2
       super
+      
+      rem = []
+      children.each_with_index do |c,i|
+      if c.is_a?(VCall)
+        if c.sexp.length == 2 and c.sexp[1][0] == :"@ident"
+          if DEF_FLAGS.index[flg = c.sexp[1][1].to_sym]
+            rem << i
+            @next_def_flags << flg
+          end
+        end
+      end
+      end
+      rem.each do |i| children.delete_at(i) end
     end    
     
     def write &b
       children.each do |c|
         x(" "*ident)
+        
+        if c.sexp[0] == :def
+          buff << @next_def_flags.join(" ")+" "
+          @next_def_flags = []
+        end
+        
         c.write
       
         if !c.is_a?(Body)
@@ -249,6 +272,8 @@ module Q
       end
     end
   end
+  
+  class VCall < Base; end
   
   class FCall < Base
     def write
@@ -424,6 +449,7 @@ module Q
   
   class Def < Body
     attr_reader :name, :params, :return_type
+    attr_accessor :flags
     def init
       n = @sexp.delete_at(3)
       d = @sexp
@@ -445,7 +471,7 @@ module Q
       return_type.write
       @ident -= 4
       buff << "\n"
-      x("public #{return_type.buff.join()} #{name}(")
+      x("#{flags || "public virtual"} #{return_type.buff.join()} #{name}(")
       params.write
       buff << ") {\n"
       super
@@ -458,20 +484,21 @@ module Q
     attr_reader :name, :type
     def perform
       super
-      if parent.parent.is_a? Block and !children[1] and parent.parent.type_param
-        @type = parent.parant.type_param
-      else
-        @type = children[1]
-      end
+      
+      @type = children[1]
       
       @name = children[0]
     end
     
     def write
-      type.write
-      buff << " "
-      name.write
-      buff.last.gsub!(":",'')
+      if name.is_a?(Value)
+        type.write
+        buff << " "
+        name.write
+        buff.last.gsub!(":",'')
+      else
+        type.write
+      end
     end
   end
   
@@ -544,27 +571,62 @@ module Q
       buff << "foreach ( "
       Class.new(Params).new(@params.sexp,self).write
       buff << " in #{target}) {\n"
-      Class.new(Body).new(@block.sexp, self).write
+      cls = Class.new(Body)
+      cls.send :include, Iterator
+      cls.new(@block.sexp, self).write
       buff << "}\n"
     end
   end
   
+  
+  
+  module Iterator
+     def set_lvars(parent = @parent)
+      if parent
+        p = parent
+        until p.respond_to? :lvars
+          p = p.parent
+        end
+        @lvars = p.lvars.clone
+      end    
+    end
+  end
+  
   class Block < Body
+    include Iterator
     attr_reader :params
     def init
       @params = Params.new(sexp[1][1],self)
       @sexp = [:bodystmt].push sexp[2]
+      set_lvars
+    end
+    
+    def write
+     if buff.last =~ /\)$/
+       bool = true
+       buff.last.gsub!(/\)$/, "")
+     end
+     
+     buff << "("
+     params.write
+     buff << ") => {\n"
+     super
+     buff << "}#{bool ? ")" : ""}"
+     
     end
   end
   
   class Params < Base
-    
     def perform
-      sexp[5].each do |q|
-        children << Param.new([:param].push(*q), self)
-      end if sexp[5]
-      
-
+      if sexp[1]
+        sexp[1].each do |q|
+          children << Param.new([:param].push(*q), self)
+        end
+      elsif sexp[5]
+        sexp[5].each do |q|
+          children << Param.new([:param].push(*q), self)
+        end
+      end
     end
     
     def write
@@ -606,7 +668,8 @@ module Q
   
   def self.translate code
     sexp = Ripper::sexp(code)
-    if __FILE__ == $0
+    
+    if 1 or  __FILE__ == $0
       PP.pp sexp[1]
     end    
     prog = Q::Program.new(sexp,nil)
@@ -614,10 +677,18 @@ module Q
     prog.buff.join
   end
 end
-
+# methods: always public, overide
+#
+#
 if __FILE__ == $0
 require 'pp'
+# Methods virtual public
 code = "
+delagate; virtual
+def foo(x:int):int
+  $foo = 8
+end
+
 class Z < Object
   def n(x:int, y:int[], z:string):int[]
     foo = int[2]
@@ -626,7 +697,15 @@ class Z < Object
 
     foo.each do |z:int|
       print(\"%d\",z+1)
+      n = int[3]
+      n[0] = 8
     end
+
+    ted.fred() do |y, v| 
+      puts(6)
+      foo = 4
+      a = h
+    end    
   end
 end
 "
