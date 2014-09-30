@@ -134,8 +134,8 @@ namespace :N do
         c += 1 
       end
       
-      d(i) do |q,i|
-        z[i] = q
+      d(i) do |q,f|
+        z[f] = q
       end
       
       # var i = new int[this.foo.length];
@@ -147,8 +147,8 @@ namespace :N do
       #     i[c] = x;
       #   }
       #  
-      #   d((q,i) => {
-      #     z[i] = q;
+      #   d((q,f) => {
+      #     z[f] = q;
       #   });
       # }
     end
