@@ -16,18 +16,21 @@ Proposed translation
 # n   = :int                 # int name;
 # n   = :int[]               # int[] name;
 # n   = :int[4]              # int[] name = new int[4];
-# n   = :"ArrayList<string>" # ArrayList<string> name = new ArrayList<string> ();
+# n   = :"ArrayList<string>" # ArrayList<string> name;
 
 # Local inference
 #
-# scope does not have 'a' as a local var
-# a = 1         # var a = 1;
-# a = int[4]    # var a = new int[4];
-# a = [1,2,3,4] # raise "Arrays must be explicty typed"
+# scope does not have 'a'
+# a = 1                     # var a = 1;
+# a = int[4]                # var a = new int[4];
+# a = ArrayList(string).new # var a = new ArrayList<string> ();  
+# a = [1,n,z,4]             # raise: needs; a = :int[], first 
 #
 # if a is in local scope ...
 #
+# a = 1         # a = 1;
 # a = [1,2,3]   # a = {1,2,3};
+# ...
 
 
 namespace :N do
@@ -124,8 +127,8 @@ namespace :N do
     # [override | new | abstract (| virtual | public)]
     # NOTE: abstract for interfaces, abstract class's    
     def perform():void
-      i = int[@foo.length]  # var i = new int[this.foo.length];
-      z = :int[@foo.length] # int[] z = new int[this.foo.length];
+      i = int[@foo.length]  
+      z = :int[@foo.length]
       c = 0
       
       @foo.each do |x:int|
