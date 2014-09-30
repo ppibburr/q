@@ -6,10 +6,24 @@ Ruby like syntax for Vala programming
 Proposed translation
 ===
 ```ruby
-# $<name>   class field
-# @@<name>  static field
-# @<name>   instance field
-# <name>    local
+# in class bodies:
+#
+# $<name>  = ... #=> declare class field
+# @@<name> = ... #=> declare static field
+# @<name>  = ... #=> declare instance field
+# <name>   = ... #=> invalid
+
+# in functions bodies:
+#
+# $<name>  = ... #=> set class field/property
+# @@<name> = ... #=> set static field/property
+# @<name>  = ... #=> set instance field/property
+# <name>   = ... #=> set local
+#
+# $<name>   get class field/property
+# @@<name>  get static field/property
+# @<name>   get instance field/property
+# <name>    get local
 
 # Declaring explicit types
 #
@@ -34,104 +48,64 @@ Proposed translation
 
 
 namespace :N do
-# namespace N { ... }
-
-  module Foo [Object, Bar]
-  # interface Foo : Object, Bar {
-  #   ...
-  # }
+  module Foo [Object]
   end
 
   class N < Object
-    include Foo
-    # pubic class N : Object, Foo { ... }
-
-
-
+    include Foo        
+            
     # static field
-    #
-    # [public | protected (| private)] 
-    @@foo = :int[4] # {type:value}
-    #=> private static int[] foo = new int[4]; 
+    @@foo = :int[4]
     
     # static property
-    #
-    # [public | private (| protected)]
-    sattr_accessor :bar, :int # [| type:<value>] 
-    #=> protected static int bar { get;set; /* default = <value> */}
+    sattr_accessor :bar, :int
 
 
     # class field
-    # 
-    # [private (| protected)] 
-    $foo = :int[4] 
-    #=> protected class int[] foo = new int[4];
+    $quux = :int[4] 
     
     # class property
-    #
-    # [private (| protected)]
-    cattr_accessor :bar, :int 
-    #=> protected class int bar { get;set; /* default = <value> */}
+    cattr_accessor :moof, :int 
 
     # instance field
-    #
-    # [public (| private)]
-    @foo = :int[4] # | type:<value>
-    
+    @ins_fld = :int[4]
+
     # instance property
-    #
-    # [private (| public)]
     attr_accessor :ins_p, :int[4]    
-    #=> public int[] ins_p { get;set; default = new int[4];}
-    
+
+ 
     class << self
-      # static construct { ... }
-      @@foo[0] = 1;
     end
     
     def self.inherited
-      # class construct { ... {
-      # $foo[0] = 1;
     end
     
     def self.new
-      # public Type() { ... }
     end
     
-    def self.new_with_property(prop:int)
-      # public Type.with_property(int prop) { ... }
+    def self.with_property(prop:int):constructor
     end
     
     def initialize
-      # construct { ... }
     end
     
     delagate
     def del(a:int[]):void
-      # delegate void public del (int[] a) { }
     end
     
     def d(a:int[], b:del):void
       b(a);
-      # public void d (int a, del b) {
-      #   b(a);
-      # }
     end
     
-    # [override | new | abstract (| virtual | public)]
-    # NOTE: abstract for interfaces, abstract class's
-    def self.bar():void
-      # static public void bar() { ... }
+    def self.baz():void
     end
-    
-    # [override | new | abstract (| virtual | public)]
-    # NOTE: abstract for interfaces, abstract class's    
+       
     def perform():void
-      i = int[@foo.length]  
-      z = :int[@foo.length]
+      i = int[@ins_p.length]  
+      z = :int[@ins_p.length]
       c = 0
       
-      @foo.each do |x:int|
+      @ins_p.each do |x:int|
         puts("%d",x)
         i[c] = x 
         c += 1 
@@ -140,22 +114,72 @@ namespace :N do
       d(i) do |q,f|
         z[f] = q
       end
-      
-      # var i = new int[this.foo.length];
-      # int[] z = new int[this.foo.length];
-      # var c = 0;
-      # public virtual void perform() {
-      #   foreach (x in this.foo) {
-      #     stdout.printf("%d"+"\n", x);
-      #     i[c] = x;
-      #   }
-      #  
-      #   d((q,f) => {
-      #     z[f] = q;
-      #   });
-      # }
     end
   end
 end
 
+```
+
+becomes
+
+```vala
+namespace Quux {  
+  interface Foo : Object {
+
+  }    
+  
+  pubic class N : Object, Foo {
+    private static int[] foo = new int[4]; 
+    protected static int bar { get;set;}
+    
+    protected class int[] quux = new int[4];
+    protected class int moof { get;set;}
+    
+    public float ins_fld = 4f;
+    public int[] ins_p { get;set; default = new int[4];}
+         
+    delegate void public del (int[] a) { }      
+    
+    static public void baz() {
+    
+    }     
+    
+    public Type() {
+      
+    }
+    
+    // Q Source had empty body
+    // so we GObject style construct
+    public Type.with_property(int prop) {
+      Object(propName: prop);  
+    }    
+    
+    static construct {
+      
+    }
+    
+    construct {
+      
+    }
+    
+    public void d (int a, del b) {
+      b(a);
+    }     
+        
+    public virtual void perform() {    
+      var   i = new int[this.ins_p.length];
+      int[] z = new int[this.ins_p.length];
+      var c = 0;      
+    
+      foreach (x in this.ins_p) {
+        stdout.printf("%d"+"\n", x);
+        i[c] = x;
+      }
+      
+      d((q,f) => {
+        z[f] = q;
+      });
+    } 
+  }
+}
 ```
