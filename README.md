@@ -5,8 +5,9 @@ Ruby like syntax for Vala programming
 
 Proposed translation
 ===
+
 ```ruby
-# in class bodies:
+# in class bodies
 #
 # $<name>  = ... #=> declare class field
 # @@<name> = ... #=> declare static field
@@ -47,7 +48,7 @@ Proposed translation
 # ...
 
 
-namespace :N do
+namespace N do
   module Foo [Object]
   end
 

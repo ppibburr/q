@@ -10,6 +10,7 @@ end
 
 code = File.read(ARGV[0])
 
-out = Q.translate(code)
+QSexp.build(code).write
+out = QSexp::BUFFER.join
 
 puts out
