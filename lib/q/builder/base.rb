@@ -2,32 +2,35 @@ module QSexp
 	module Node
 	  attr_accessor :parent, :line
 	  def initialize l, p = nil
-		  @parent = p
+		@parent = p
 	  	@line = l
 	  end
 	  
 	  def get_scope
 	    scope = :generic
 
-		p = @parent || self
+		p = self
 		until p.respond_to? :scope
 		  p = p.parent
 		  break unless p
 		end
 
-        if p
-          if p.scope.is_a?(ClassScope)
+        return p.scope
+      end
+      
+      def get_scope_type
+        if s=get_scope
+          if s.is_a?(ClassScope)
             scope = :class
-          elsif p.scope.is_a?(NamespaceScope)
+          elsif s.is_a?(NamespaceScope)
             scope = :namespace         
           else
             scope = :generic
           end
         end
         
-        return scope
+        return scope      
       end
-    
     
     def parented p
       @parent = p
@@ -55,6 +58,16 @@ module QSexp
 		  @event = e
 		  super l, *o
 	  end
+	  
+	  def build_str ident=0
+	    if event == :"@ignored_nl"
+	      "\n"; exit
+	    elsif event == :"@nl"; exit
+	      "\n"
+        else
+          super ident
+	    end
+	  end
 	end
 	  
 	  
@@ -70,7 +83,7 @@ module QSexp
     def build_str ident=0
       str = ""
       children.each do |c|
-        str << c.build_str(ident).to_s+";\n"
+        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.event == :method_add_block) ? "" : ";"}\n"
       end if children
       str
     end
@@ -91,6 +104,10 @@ module QSexp
       @args = a
 	  end
     
+    def push q
+      @args << q
+    end
+    
     def build_str ident=0
       z = []
       args.each do |a|
@@ -108,7 +125,14 @@ module QSexp
     def self.new e, *o
       case e
       when :call
-        construct(QSexp::Call, e, *o)
+        
+        if o[1].is_a?(Single) and o[3].event == :"@ident" and ["d","f", "l"].index(o[3].string)
+          if [:float, :int].index(o[1].resolved_type)
+            return construct(QSexp::Numeric, e, *o)
+          end
+        end
+        
+        return construct(QSexp::Call, e, *o)
       when :params
         construct(QSexp::Parameters, e, *o)   
       when :def
@@ -126,7 +150,9 @@ module QSexp
       when :var_field  
         construct(QSexp::VarField, e, *o)  
       when :var_ref
-        construct(QSexp::VarRef, e, *o)               
+        construct(QSexp::VarRef, e, *o)  
+      when :string_literal
+        construct(QSexp::String, e, *o)            
       when :command;
         if o[1].string == "namespace"
           construct(QSexp::Namespace, e, *o)
@@ -157,6 +183,17 @@ module QSexp
 	  def initialize e, l, t
 		  super(e, l)
 		  @string = t
+	  end
+	  
+	  def resolved_type
+	    case event
+	    when :"@int"
+	      :int
+	    when :"@float"
+	      :float
+	    when :"string_literal"
+	      :string
+	    end
 	  end
 	  
 	  def type

@@ -1,48 +1,25 @@
 module QSexp
 class Scope
-  attr_accessor :lvars, :item, :type
-  def initialize parent_scope = nil
-    @parent_scope = parent_scope
+  attr_accessor :lvars, :item, :type, :parent_scope, :owner
+  def initialize owner
+    @lvars = {}
+    @owner = owner
+    if (@parent_scope = owner.get_scope)
+      parent_scope.lvars.each_pair do |k, v|
+        lvars[k] = v
+      end
+    end
   end
   
-  def assign fld, scope, type:nil, value:nil
-    case scope
-    when :constant
-    
-    when :local
-      lvars[fld] = [type,value]
-    end
+  def new_local fld, type
+    @lvars[fld] = type
   end
 end
 
 class ClassScope < Scope
-  def assign fld,scope, type:nil, value:nil
-    case scope
-    when :class
-       
-    when :static
-       
-    when :instance
-       
-    else
-      super   
-    end
-  end
 end
 
 class NamespaceScope < Scope
-  def assign fld,scope, type:nil, value:nil
-    case scope
-    when :class
-       
-    when :static
-       
-    when :instance
-       
-    else
-      super   
-    end
-  end
 end
 
 module Array
@@ -51,7 +28,7 @@ module Array
   end
   
   def build_str ident = 0
-    "#{" "*ident}{"+args[0].children.map do |c| c.build_str end.join(", ")+"}"
+    "#{" "*ident}{"+args[0].children.map do |c| c.build_str() end.join(", ")+"}"
   end
 end
 
@@ -63,7 +40,7 @@ module Variables
     when :class
       args[0].string.gsub("$",'') 
     when :instance  
-      args[0].string.gsub("@",get_scope() == :class ? "" : "this.")   
+      args[0].string.gsub("@",get_scope_type() == :class ? "" : "this.")   
     else
       args[0].string    
     end
@@ -139,7 +116,7 @@ module Class
   end
   
   def build_str ident = 0
-    "\n#{" "*ident}public class #{name} {\n#{" "*(ident+2)}"+
+    "\n#{" "*ident}public class #{name} {\n"+
     super(ident)+
     "\n#{" "*ident}}"
   end
@@ -201,8 +178,10 @@ module Namespace
   end
   
   def build_str ident = 0
-    "#{" "*ident}namespace #{name}"+
-   super(ident-2)
+   a=super(ident-2).split("\n")
+   a[1].gsub!(/^  /,'')
+   "#{" "*ident}namespace #{name}"+
+   a.join("\n")
   end
 end
 
@@ -236,15 +215,15 @@ module Assignment
      when :aref
        case args[1].args[0].event
        when :symbol_literal
-         if (z=args[1].args[1].args[0].children.length) < 1
+         if !args[1].args[1]
            type = :declare_array
-         elsif z == 1
+         elsif (z=args[1].args[1].args[0].children.length) == 1  
            type = :set_array_length
          else
            type = :set_declare_array
          end
          
-         return build_type_array(type)
+         return build_type_array(type,ident)
        end
        
      when :symbol_literal
@@ -255,7 +234,18 @@ module Assignment
     if is_local?() and !new_local?()
       "#{" "*ident}"+args[0].build_str(0) + " = "+ args[1].build_str(0)
     elsif !is_local?()
-      "#{" "*ident}#{[:class, :namespace].index(get_scope()) ? declare_scope() : ""}"+args[0].build_str(0) + " = "+ args[1].build_str(0)
+      if args[1].is_a?(String)
+        type = get_scope_type != :generic ? "string " : ""
+      else
+        type = get_scope_type != :generic ? (args[1].is_a?(Single) ? args[1].resolved_type.to_s+" " : "#{args[1].resolved_type} "): ""
+      end
+      
+      d = args[1].build_str(0)
+      
+      "#{" "*ident}#{[:class, :namespace].index(get_scope_type()) ? declare_scope() : ""}#{type}"+args[0].build_str(0) + " = "+ d
+    elsif is_local?() and new_local?()    
+      get_scope.new_local(args[0].args[0].string, args[0].args[0].type)
+      return "#{" "*ident}var "+args[0].build_str(0) + " = "+ args[1].build_str(0)
     end
   end
   
@@ -268,22 +258,46 @@ module Assignment
   end
   
   def new_local?
-    false
+    !get_scope().lvars[args[0].args[0].string]
   end
   
-  def build_type_array type
+  def build_type_array type, ident=0
+    bool = is_local?
+  
     typed = "#{args[1].args[0].build_str}"
     case type
+    when :declare_array
+      return "#{" "*ident}#{[:class, :namespace].index(get_scope_type()) ? declare_scope() : ""}"+typed+"[] #{args[0].build_str(0)}"
     when :set_array_length
       val = "[#{args[1].args[1].args[0].build_str(0).gsub("\n",'').gsub(";",'')}]"
-      "#{[:class, :namespace].index(get_scope()) ? declare_scope() : ""}"+typed+"[] #{args[0].build_str(0)} = new #{typed}"+val
+      if bool and new_local?
+        get_scope.new_local(args[0].args[0].string, args[0].args[0].type)
+        x = "var "
+      elsif bool
+        x = ""
+      else
+        x = "#{[:class, :namespace].index(get_scope_type()) ? declare_scope() : ""}"+typed+"[] "
+      end
+      
+      return "#{" "*ident}#{x}#{args[0].build_str(0)} = new #{typed}"+val  
+          
     when :set_declare_array
       val = "{#{args[1].args[1].args[0].build_str(0).gsub("\n",", ").gsub(/\, $/,'').gsub(";",'')}}"
-      "#{[:class, :namespace].index(get_scope()) ? declare_scope() : ""}"+typed+"[] #{args[0].build_str(0)} = "+val
-    end
+      if bool and new_local?
+        get_scope.new_local(args[0].args[0].string, args[0].args[0].type)
+        x = "var "
+      elsif bool
+        x = ""
+      else
+        x = "#{[:class, :namespace].index(get_scope_type()) ? declare_scope() : ""}"+typed+"[] "
+      end      
+       return "#{" "*ident}#{x}#{args[0].build_str(0)} = new #{typed}[] "+val
+    end   
   end
   
   def declare_scope
+    return "" if is_local?
+  
   "#{[:static, :class].index(n=args[0].args[0].type) ? "#{get_access()} #{n} " : (args[0].args[0].type == :instance) ? "public " : ""}"
   end
   
@@ -368,6 +382,9 @@ class ::Symbol
 end
 
 module Call
+  def initialize *o
+    super
+  end
 end
 
 module FCall
@@ -381,4 +398,26 @@ end
 module Command
 
 end
+
+module Numeric
+  def resolved_type
+    case args[2].string
+    when "f"
+      :float
+    when "d"
+      :double
+    end
+  end
+  
+  def build_str ident = 0
+    "#{" "*ident}#{args[0].string}#{args[2].string}"
+  end
+end
+
+module String
+  def build_str  ident=0
+    '"'+super(ident)+'"'
+  end
+end
+
 end
