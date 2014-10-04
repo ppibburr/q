@@ -187,14 +187,56 @@ end
 
 module Block
   include Body
+  attr_accessor :delegate_type
+  attr_reader :parameters
   def initialize *o
     super
     @body_stmt = args[1]
+    @parameters = args[0].args[0] if args[0]
+    @parameters.untyped_parameters.map do |prm|
+      n = prm.name
+      scope.lvars[n] = :unknown
+    end if parameters and parameters.untyped_parameters
   end
   def build_str ident=0
-    "#{" "*ident} {\n#{" "*(ident+2)}"+
+    q = !!parameters
+    if q
+      q = "(#{parameters.build_str})"
+    else
+      q = "()"
+    end
+    "#{q} => {\n#{" "*(ident+2)}"+
     super(ident)+
-    "\n}"
+    "\n#{" "*ident}}"
+  end
+end
+
+module MethodAddBlock
+  def initialize *o
+    super
+    on_parented do
+    if !args[0].args[0]
+      if args[0].args[1] and args[0].args[1].is_a?(Item)
+        args[1].delegate_type = args[0].args[1].build_str().gsub(";\n",'').to_sym
+        args[0].args[1] = nil
+      end
+    end
+    end
+  end
+  def build_str ident = 0
+    if args.length > 1
+      s=args[0].build_str(ident)
+      s=s.gsub(/\)$/,", ")+args[1].build_str(ident)+")"
+
+      # proc block to closure
+      if !args[0].args[0]
+        s=s.strip.gsub(/\(, /,'').gsub(/}\)$/,"}")
+      end
+    
+      s
+    else
+      super
+    end
   end
 end
 
@@ -228,11 +270,24 @@ module Assignment
        
      when :symbol_literal
        return declare_type(ident)
+       
+     when :method_add_block
+       type = args[1].args[1].delegate_type
+       type = type ? type.to_s+" " : ""
+       d = args[1].build_str(args[1].is_a?(MethodAddBlock) ? ident : 0)
+      
+       if (is_local?() and new_local?()) or !is_local?
+         # Full declaration with assignment
+         return "\n#{" "*ident}#{[:class, :namespace].index(get_scope_type()) ? declare_scope() : ""}#{type}"+args[0].build_str(0) + " = "+ d
+       else
+         # Assignment
+         return "\n#{" "*ident}"+args[0].build_str(0) + " = "+ d 
+       end
      end
      
     
     if is_local?() and !new_local?()
-      "#{" "*ident}"+args[0].build_str(0) + " = "+ args[1].build_str(0)
+      "#{" "*ident}"+args[0].build_str(0) + " = "+ args[1].build_str(args[1].is_a?(MethodAddBlock) ? ident : 0)
     elsif !is_local?()
       if args[1].is_a?(String)
         type = get_scope_type != :generic ? "string " : ""
@@ -240,12 +295,12 @@ module Assignment
         type = get_scope_type != :generic ? (args[1].is_a?(Single) ? args[1].resolved_type.to_s+" " : "#{args[1].resolved_type} "): ""
       end
       
-      d = args[1].build_str(0)
+      d = args[1].build_str(args[1].is_a?(MethodAddBlock) ? ident : 0)
       
       "#{" "*ident}#{[:class, :namespace].index(get_scope_type()) ? declare_scope() : ""}#{type}"+args[0].build_str(0) + " = "+ d
-    elsif is_local?() and new_local?()    
+    elsif is_local?() and new_local?()
       get_scope.new_local(args[0].args[0].string, args[0].args[0].type)
-      return "#{" "*ident}var "+args[0].build_str(0) + " = "+ args[1].build_str(0)
+      return "#{" "*ident}var "+args[0].build_str(0) + " = "+ args[1].build_str(args[1].is_a?(MethodAddBlock) ? ident : 0)
     end
   end
   
@@ -308,7 +363,7 @@ end
 
 class ::Object
   def build_str(ident=0)
-    "#{" "*ident}"+self.class.to_s
+    ""
   end 
 end
 
@@ -333,28 +388,14 @@ module Parameters
   attr_reader :typed_parameters, :untyped_parameters
   def initialize *o
     super 
-    @typed_parameters   = args[4].map do |a| Parameter.new(*a) end
-    @untyped_parameters = args[0]
+    @typed_parameters   = args[4].map do |a| Parameter.new(*a) end if args[4]
+    @untyped_parameters = args[0].map do |a| Parameter.new(*a) end if args[0]
   end
   
   def build_str ident=0
     s = "#{" "*ident}"
-    typed_parameters.each do |prm| s << prm.build_str end
+    s << untyped_parameters.map do |prm|  prm.build_str end.join(", ") if untyped_parameters    
     s
-  end
-end
-
-module Arguments
-
-end
-
-module Reference
-  module Array
-  
-  end
-  
-  module Variable
-  
   end
 end
 
@@ -388,11 +429,15 @@ module Call
 end
 
 module FCall
-
+  def build_str ident=0
+    super
+  end
 end
 
 module VCall
-
+  def build_str ident=0
+    super
+  end
 end
 
 module Command
@@ -420,4 +465,17 @@ module String
   end
 end
 
+module MethodAddArg
+  def build_str ident = 0
+    "#{" "*ident}"+args[0].build_str(0) + 
+    (args[0].is_a?(Cast) ? "#{args[1].build_str.gsub(";\n",'')}" : "(#{args[1].build_str.gsub(";\n",'')})")
+  end
+end
+
+
+module Cast
+  def build_str ident=0
+    "("+args[0].string+") "
+  end
+end
 end

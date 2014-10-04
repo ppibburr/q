@@ -84,6 +84,7 @@ module QSexp
       str = ""
       children.each do |c|
         str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.event == :method_add_block) ? "" : ";"}\n"
+        str.replace("\n") if str.strip == ";"
       end if children
       str
     end
@@ -122,6 +123,17 @@ module QSexp
       z.join
     end
     
+    CASTS = [
+      :char,
+      :uchar,
+      :int,
+      :uint,
+      :long,
+      :flt,
+      :double,
+      :string
+    ]
+    
     def self.new e, *o
       case e
       when :call
@@ -133,6 +145,23 @@ module QSexp
         end
         
         return construct(QSexp::Call, e, *o)
+        
+      when :method_add_arg
+        construct(QSexp::MethodAddArg, e, *o)
+        
+      when :method_add_block
+        construct(QSexp::MethodAddBlock, e, *o)
+        
+      when :fcall
+        if o[1].type == :local
+          if CASTS.index(o[1].string.to_sym)
+            construct(QSexp::Cast, e, *o)
+          elsif o[1].string == "proc";
+            return nil
+          else
+            construct(QSexp::FCall, e, *o)  
+          end
+        end
       when :params
         construct(QSexp::Parameters, e, *o)   
       when :def
@@ -151,6 +180,8 @@ module QSexp
         construct(QSexp::VarField, e, *o)  
       when :var_ref
         construct(QSexp::VarRef, e, *o)  
+      when :vcall
+        construct(QSexp::VCall, e, *o)          
       when :string_literal
         construct(QSexp::String, e, *o)            
       when :command;
