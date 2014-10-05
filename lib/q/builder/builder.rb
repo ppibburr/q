@@ -257,7 +257,7 @@ module Def
   include Declaration
   def initialize *o
     super
-    
+   
     @symbol    = args[0].build_str.to_sym
     @body_stmt = args[2]
     
@@ -274,7 +274,7 @@ module Def
   
   def build_str(ident=0)
     "\n#{" "*ident}#{get_access()} #{declare_scope()} #{declare_kind()} #{return_type || "void"} #{symbol}("+parameters.build_str+")"+
-    (delegate? ? "" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
+    (delegate? ? ";" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
   end
   
   def delegate?
@@ -344,11 +344,21 @@ module Block
   end
 end
 
+module Each
+end
+
+module Binary
+  def build_str ident = 0
+    super(0)
+  end
+end
+
 module MethodAddBlock
   def initialize *o
     super
     on_parented do
     if !args[0].args[0]
+      extend Each
       if args[0].args[1] and args[0].args[1].is_a?(Item)
         args[1].delegate_type = args[0].args[1].build_str().gsub(";\n",'').to_sym
         args[0].args[1] = nil
@@ -363,7 +373,11 @@ module MethodAddBlock
 
       # proc block to closure
       if !args[0].args[0]
-        s=s.strip.gsub(/\(, /,'').gsub(/}\)$/,"}")
+        s=(" "*ident)+s.strip.gsub(/\(, /,'').gsub(/}\)$/,"}")
+      end
+  
+      if !args[0].args[1].args[0]
+        s=(" "*ident)+s.strip.gsub(/\(, /,'(').gsub(/}\)$/,"})")
       end
     
       s
@@ -531,7 +545,8 @@ module Parameters
   
   def build_str ident=0
     s = "#{" "*ident}"
-    s << untyped_parameters.map do |prm|  prm.build_str end.join(", ") if untyped_parameters    
+    s << untyped_parameters.map do |prm|  prm.build_str end.join(", ") if untyped_parameters 
+    s << typed_parameters.map do |prm|  prm.build_str end.join(", ") if typed_parameters         
     s
   end
 end
@@ -576,6 +591,8 @@ module Call
     if args[2].string == "each"
       "\n#{" "*ident}foreach (#{parent.args[1].build_str.gsub(";\n",'')} #{parent.parent.args[1].parameters.untyped_parameters[0].build_str} in #{args[0].build_str})"+
       " {\n#{parent.parent.args[1].body_stmt.build_str(ident+2)}#{" "*ident}}"
+    else
+      super
     end
   end
 end
@@ -621,6 +638,9 @@ module MethodAddArg
   def build_str ident = 0
     "#{" "*ident}"+args[0].build_str(0) + 
     (args[0].is_a?(Cast) ? "#{args[1].build_str.gsub(";\n",'')}" : "(#{args[1].build_str.gsub(";\n",'')})")
+  rescue => e
+    puts "LINE: #{line}, EVENT: #{event}: #{args[0].event} ****"
+    raise e
   end
 end
 
@@ -637,7 +657,8 @@ module MemberModifier
     :virtual,
     :override,
     :replace,
-    :delegate
+    :delegate,
+    :static
   ]
   
   include VCall

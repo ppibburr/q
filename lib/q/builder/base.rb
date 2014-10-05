@@ -7,8 +7,6 @@ module QSexp
 	  end
 	  
 	  def get_scope
-	    scope = :generic
-
 		p = self
 		until p.respond_to? :scope
 		  p = p.parent
@@ -60,16 +58,6 @@ module QSexp
 		  @event = e
 		  super l, *o
 	  end
-	  
-	  def build_str ident=0
-	    if event == :"@ignored_nl"
-	      "\n"; exit
-	    elsif event == :"@nl"; exit
-	      "\n"
-        else
-          super ident
-	    end
-	  end
 	end
 	  
 	  
@@ -85,7 +73,7 @@ module QSexp
     def build_str ident=0
       str = ""
       children.each do |c|
-        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.is_a?(For) or c.event == :method_add_block) ? "" : ";"}\n"
+        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.is_a?(For) or c.is_a?(Each)) ? "" : ";"}\n"
         str.replace("\n") if str.strip == ";"
       end if children
       str.gsub(/^;\n/,'')
@@ -138,6 +126,8 @@ module QSexp
     
     def self.new e, *o
       case e
+      when :binary
+        construct QSexp::Binary, e, *o
       when :call
         
         if o[1].is_a?(Single) and o[3].event == :"@ident" and ["d","f", "l"].index(o[3].string)
