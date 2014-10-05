@@ -44,8 +44,14 @@ module Declaration
       return "virtual"     if @modifier[:virtual]
       return "override"    if @modifier[:override]            
       return "new"         if @modifier[:replace]
-      return "delegate"         if @modifier[:delegate]      
+      return "delegate"    if @modifier[:delegate]      
     end    
+  end
+  
+  def declare_scope
+    if @modifier
+      return "static"    if @modifier[:static]                
+    end 
   end
 end
 
@@ -158,10 +164,10 @@ module Program
 end
 
 module Class
-  attr_reader :name, :superclass, :interfaces
+  attr_reader :name, :super_class, :implements
   include Body
   def initialize *o
-    @interfaces = []
+    @implements = nil
     super
     
     case args[0].event
@@ -171,13 +177,77 @@ module Class
       raise
     end
     
+    if args[1]
+      case args[1].event
+      when :aref
+        # Superclass with implements
+     
+        # superclass
+        @super_class = args[1].args[0].args[0].string
+   
+        # implements
+        @implements = args[1].args[1].build_str
+      
+      when :array
+        # implements
+        @implements = args[1].build_str.gsub(/^\{/,'').gsub(/\}$/,'')
+      when :var_ref
+        # superclass
+        raise "#{line}: Invalid inheritance" unless args[1].args[0].type == :constant
+        @super_class = args[1].build_str
+      else
+        raise "#{line}: Invalid inheritance"
+      end
+    end
+    
     @body_stmt = args[2]
   end
   
   def build_str ident = 0
-    "\n#{" "*ident}public class #{name} {\n"+
+    "\n#{" "*ident}public class #{name}#{super_class ? " : #{super_class}" : ""}#{implements ? (super_class ? ", " : " : ")+implements : ""} {\n"+
     super(ident)+
     "\n#{" "*ident}}"
+  end
+end
+
+module IfElse
+  attr_reader :else_stmt
+  def initialize *o
+    super
+    @else_stmt = args[2]
+  end
+  
+  def build_str ident = 0
+     s = "if (#{args[0].build_str}) {\n" +
+     args[1].build_str(ident+2) +
+    "\n#{" "*ident}} "  
+  
+    if else_stmt
+      s << else_stmt.build_str(ident).gsub(Regexp.new("^#{" "*ident}els"),' els')
+    end
+    
+    return s
+  end
+end
+
+module If
+  include IfElse
+  
+  def build_str ident = 0
+    "#{tab=" "*ident}" + super
+  end
+end
+
+module ElsIf
+  include IfElse
+  def build_str ident = 0
+    s= "else " + super
+  end  
+end
+
+module Else
+  def build_str ident = 0
+    "#{tab=" "*ident}else {\n#{tab=" "*ident}}\n"
   end
 end
 
@@ -204,7 +274,11 @@ module Def
   
   def build_str(ident=0)
     "\n#{" "*ident}#{get_access()} #{declare_scope()} #{declare_kind()} #{return_type || "void"} #{symbol}("+parameters.build_str+")"+
-    (@modifier[:delegate] ? "" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
+    (delegate? ? "" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
+  end
+  
+  def delegate?
+    @modifier and @modifier[:delegate]
   end
   
   def get_access
@@ -212,7 +286,7 @@ module Def
   end
   
   def declare_scope
-    ""
+    super or ""
   end
   
   def declare_kind
@@ -413,7 +487,7 @@ module Assignment
   def declare_scope
     return "" if is_local?
   
-  "#{[:static, :class].index(n=args[0].args[0].type) ? "#{get_access()} #{n} " : (args[0].args[0].type == :instance) ? "public " : ""}"
+    super or "#{[:static, :class].index(n=args[0].args[0].type) ? "#{get_access()} #{n} " : (args[0].args[0].type == :instance) ? "public " : ""}"
   end
   
   def get_access

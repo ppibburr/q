@@ -199,6 +199,12 @@ module QSexp
         construct(QSexp::For, e, *o)  
       when :args_add_block 
         construct(QSexp::ArgsAddBlock, e, *o)    
+      when :if
+        construct(QSexp::If, e, *o)
+      when :elsif
+        construct(QSexp::ElsIf, e, *o)
+      when :else
+        construct(QSexp::Else, e, *o)                
       when :command;
         if o[1].string == "namespace"
           construct(QSexp::Namespace, e, *o)
