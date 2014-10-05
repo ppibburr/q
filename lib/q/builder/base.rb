@@ -49,6 +49,7 @@ module QSexp
     
     def write buff = QSexp::BUFFER, ident=0
       buff << build_str(ident)
+
     end
 	end  
 
@@ -126,6 +127,8 @@ module QSexp
     
     def self.new e, *o
       case e
+      when :const_path_ref
+        construct QSexp::ConstPathRef, e, *o
       when :binary
         construct QSexp::Binary, e, *o
       when :call
@@ -136,6 +139,10 @@ module QSexp
           end
         end
         
+        if New.match?(*o)
+          return construct(QSexp::New, e ,*o)
+        end        
+        
         return construct(QSexp::Call, e, *o)
         
       when :method_add_arg
@@ -144,8 +151,6 @@ module QSexp
       when :method_add_block
         construct(QSexp::MethodAddBlock, e, *o)
         
-      when :call
-        construct QSexp::Call, e, *o  
         
       when :fcall
         if o[1].type == :local

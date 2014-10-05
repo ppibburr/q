@@ -59,8 +59,11 @@ module Dot2
   attr_accessor :start, :last
   def initialize *o
     super
-    @start = args[0].build_str
-    @last = args[1].build_str
+    
+    on_parented do
+      @start = args[0].build_str
+      @last = args[1].build_str
+    end
   end
 end
 
@@ -72,13 +75,17 @@ module For
 
   def initialize *o
     super
-    @name = args[0].build_str
-    @low =  args[1].start
-    @high = args[1].last
+    
+    on_parented do
+      args[1].parented self
+      @name = args[0].build_str
+      @low =  args[1].start
+      @high = args[1].last
+    end
   end
 
   def build_str ident = 0
-    "\n#{" "*ident}for (#{type || :int} #{name}; #{name} <= #{high}; #{name}++) {\n"+
+    "\n#{" "*ident}for (#{type || :int} #{name} = #{low}; #{name} <= #{high}; #{name}++) {\n"+
       args[2].build_str(ident+2)+
     "\n#{" "*ident}}"
   end
@@ -234,7 +241,7 @@ module If
   include IfElse
   
   def build_str ident = 0
-    "#{tab=" "*ident}" + super
+    "\n#{tab=" "*ident}" + super
   end
 end
 
@@ -247,7 +254,7 @@ end
 
 module Else
   def build_str ident = 0
-    "#{tab=" "*ident}else {\n#{tab=" "*ident}}\n"
+    "#{tab=" "*ident}else {\n#{args[0].build_str(ident+2)}#{tab=" "*ident}}\n"
   end
 end
 
@@ -290,7 +297,7 @@ module Def
   end
   
   def declare_kind
-    super or "virtual"
+    super or get_scope_type != :class ? "" : (declare_scope != "static" ? "virtual" : "")
   end
 end
 
@@ -373,10 +380,8 @@ module MethodAddBlock
 
       # proc block to closure
       if !args[0].args[0]
-        s=(" "*ident)+s.strip.gsub(/\(, /,'').gsub(/}\)$/,"}")
-      end
-  
-      if !args[0].args[1].args[0]
+        s=s.strip.gsub(/\(, /,'').gsub(/}\)$/,"}").gsub(Regexp.new("^#{" "*(ident*2)}"),'    ')
+      elsif !args[0].args[1].args[0]
         s=(" "*ident)+s.strip.gsub(/\(, /,'(').gsub(/}\)$/,"})")
       end
     
@@ -384,6 +389,9 @@ module MethodAddBlock
     else
       super
     end
+    
+  rescue => e
+    raise "LINE: #{line}, #{event}\n#{e}\n#{e.backtrace[0..3].join("\n")}"
   end
 end
 
@@ -712,6 +720,41 @@ module MemberModifier
   
   def [] k
     (previous.find do |q| q.args[0].string.to_sym == k end) or args[0].string.to_sym == k 
+  end
+end
+
+module ConstPathRef
+  def build_str
+    args.map do |a| a.build_str end.join(".")
+  end
+end
+
+module New
+  attr_reader :method, :type
+  def self.match? *o
+    (o[1].event == :var_ref or o[1].event == :const_path_ref) and o[3].string == "new"
+  end
+  
+  def initialize *o
+    super
+    @type   = args[0].build_str
+    if args[2].build_str =~ /^new\_/
+      @method = args[2].build_str.gsub(/^new\_/, "")
+    elsif args[2].build_str =~ /^new/
+      @method = args[2].build_str.gsub(/^new/, "")
+    end
+    
+    @method = nil if @method == ""
+    
+    on_parented do |p|
+      def p.build_str ident = 0
+        args[0].build_str ident
+      end
+    end
+  end
+  
+  def build_str ident = 0
+    "new #{type}#{method ? ".#{method}" : ""}(#{parent.args[1].build_str()})";
   end
 end
 
