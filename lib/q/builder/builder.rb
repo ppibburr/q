@@ -22,6 +22,63 @@ end
 class NamespaceScope < Scope
 end
 
+class ProgramScope < Scope
+end
+
+module Declaration
+  def set_modifier(n)
+    @modifier = n
+  end
+  
+  def get_access
+    if @modifier
+      return "public"    if @modifier[:public]
+      return "protected" if @modifier[:protected]
+      return "private"   if @modifier[:private]            
+    end   
+  end
+  
+  def declare_kind
+    if @modifier
+      return "abstract"    if @modifier[:abstract]
+      return "virtual"     if @modifier[:virtual]
+      return "override"    if @modifier[:override]            
+      return "new"         if @modifier[:replace]
+      return "delegate"         if @modifier[:delegate]      
+    end    
+  end
+end
+
+module Dot2
+  attr_accessor :start, :last
+  def initialize *o
+    super
+    @start = args[0].build_str
+    @last = args[1].build_str
+  end
+end
+
+module For
+  attr_reader :name, :low, :high, :type
+# for (type name = low; name <= high; name++) {
+#
+# }
+
+  def initialize *o
+    super
+    @name = args[0].build_str
+    @low =  args[1].start
+    @high = args[1].last
+  end
+
+  def build_str ident = 0
+    "\n#{" "*ident}for (#{type || :int} #{name}; #{name} <= #{high}; #{name}++) {\n"+
+      args[2].build_str(ident+2)+
+    "\n#{" "*ident}}"
+  end
+end
+
+
 module Array
   def initialize *o
     super
@@ -64,6 +121,8 @@ module Body
       @scope = ClassScope.new(self)
     elsif is_a?(Namespace);
       @scope = NamespaceScope.new(self)
+    elsif is_a?(Program);
+      @scope = ProgramScope.new(self)
     else
       @scope = Scope.new(self)
     end
@@ -125,6 +184,7 @@ end
 module Def
   attr_accessor :return_type, :symbol, :parameters
   include Body
+  include Declaration
   def initialize *o
     super
     
@@ -143,13 +203,12 @@ module Def
   end
   
   def build_str(ident=0)
-    "\n#{" "*ident}#{get_access()} #{declare_scope()} #{declare_kind()} #{return_type} #{symbol}("+parameters.build_str+") {\n"+
-    super(ident)+
-    "\n#{" "*ident}}"
+    "\n#{" "*ident}#{get_access()} #{declare_scope()} #{declare_kind()} #{return_type || "void"} #{symbol}("+parameters.build_str+")"+
+    (@modifier[:delegate] ? "" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
   end
   
   def get_access
-   "public"
+    super or "public"
   end
   
   def declare_scope
@@ -157,7 +216,7 @@ module Def
   end
   
   def declare_kind
-    "virtual"
+    super or "virtual"
   end
 end
 
@@ -188,7 +247,7 @@ end
 module Block
   include Body
   attr_accessor :delegate_type
-  attr_reader :parameters
+  attr_reader :parameters, :body_stmt
   def initialize *o
     super
     @body_stmt = args[1]
@@ -241,6 +300,7 @@ module MethodAddBlock
 end
 
 module Assignment
+  include Declaration
   def initialize *o
     super
     
@@ -357,6 +417,9 @@ module Assignment
   end
   
   def get_access
+    r = super
+    return r if r
+    
     args[0].args[0].type == :instance ? "public" : "protected"
   end
 end
@@ -385,7 +448,7 @@ module Parameters
     end
   end
   
-  attr_reader :typed_parameters, :untyped_parameters
+  attr_accessor :typed_parameters, :untyped_parameters
   def initialize *o
     super 
     @typed_parameters   = args[4].map do |a| Parameter.new(*a) end if args[4]
@@ -425,6 +488,21 @@ end
 module Call
   def initialize *o
     super
+    on_parented do |p|
+      if args[2].string == "each"
+        z=p.parent
+        def z.build_str ident = 0
+          args[0].args[0].build_str ident
+        end
+      end
+    end
+  end
+  
+  def build_str ident = 0
+    if args[2].string == "each"
+      "\n#{" "*ident}foreach (#{parent.args[1].build_str.gsub(";\n",'')} #{parent.parent.args[1].parameters.untyped_parameters[0].build_str} in #{args[0].build_str})"+
+      " {\n#{parent.parent.args[1].body_stmt.build_str(ident+2)}#{" "*ident}}"
+    end
   end
 end
 
@@ -472,6 +550,75 @@ module MethodAddArg
   end
 end
 
+
+module ArgsAddBlock
+  def build_str ident = 0
+    args[0].build_str.gsub(";\n",', ').gsub(/\, $/,'')
+  end
+end
+
+module MemberModifier
+  FLAGS = [
+    :abstract,
+    :virtual,
+    :override,
+    :replace,
+    :delegate
+  ]
+  
+  include VCall
+  
+  attr_reader :previous
+  def prepend n
+    (@previous ||= [])
+    
+    n.previous.each do |q|
+      previous << q
+    end
+    
+    previous.insert 0, n
+  end
+  
+  
+  
+  def initialize *o
+    super *o
+    
+    @previous = []
+    
+    on_parented do |p|
+      if :generic == p.get_scope_type
+        raise "wrong scope for member modifier"
+      end
+
+      raise "cannot use member modifier here" unless p.is_a?(Statements)
+      
+      i = p.children.index(self)
+      
+      n =  p.children[i+1]
+      
+      if n.is_a?(MemberModifier)
+        n.prepend self
+        
+        next
+      end
+      
+      unless n.is_a?(Assignment) or n.is_a?(Def) or n.is_a?(MemberModifier)
+        raise "Member Modifier has invalid target: #{n.event}"
+      end
+      
+      n.set_modifier(self)
+    end
+  end
+  
+  def build_str ident=0
+    ""
+  end
+  
+  def [] k
+    (previous.find do |q| q.args[0].string.to_sym == k end) or args[0].string.to_sym == k 
+  end
+end
 
 module Cast
   def build_str ident=0

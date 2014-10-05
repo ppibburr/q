@@ -23,7 +23,9 @@ module QSexp
           if s.is_a?(ClassScope)
             scope = :class
           elsif s.is_a?(NamespaceScope)
-            scope = :namespace         
+            scope = :namespace   
+          elsif s.is_a?(ProgramScope)
+            scope = :program      
           else
             scope = :generic
           end
@@ -83,10 +85,10 @@ module QSexp
     def build_str ident=0
       str = ""
       children.each do |c|
-        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.event == :method_add_block) ? "" : ";"}\n"
+        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.is_a?(For) or c.event == :method_add_block) ? "" : ";"}\n"
         str.replace("\n") if str.strip == ";"
       end if children
-      str
+      str.gsub(/^;\n/,'')
     end
 	end
 
@@ -152,12 +154,15 @@ module QSexp
       when :method_add_block
         construct(QSexp::MethodAddBlock, e, *o)
         
+      when :call
+        construct QSexp::Call, e, *o  
+        
       when :fcall
         if o[1].type == :local
           if CASTS.index(o[1].string.to_sym)
             construct(QSexp::Cast, e, *o)
           elsif o[1].string == "proc";
-            return nil
+            return nil    
           else
             construct(QSexp::FCall, e, *o)  
           end
@@ -181,9 +186,19 @@ module QSexp
       when :var_ref
         construct(QSexp::VarRef, e, *o)  
       when :vcall
+        if MemberModifier::FLAGS.index(o[1].string.to_sym)
+          return construct(QSexp::MemberModifier, e, *o)
+        end
+        
         construct(QSexp::VCall, e, *o)          
       when :string_literal
-        construct(QSexp::String, e, *o)            
+        construct(QSexp::String, e, *o)     
+      when :dot2
+        construct(QSexp::Dot2, e ,*o)
+      when :for
+        construct(QSexp::For, e, *o)  
+      when :args_add_block 
+        construct(QSexp::ArgsAddBlock, e, *o)    
       when :command;
         if o[1].string == "namespace"
           construct(QSexp::Namespace, e, *o)
