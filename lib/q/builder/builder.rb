@@ -636,7 +636,7 @@ module Parameters
       if type
         @type = type.build_str
         if type.event == :aref 
-          @type << "[]"
+         # @type << "[]"
         end
       end
     end
