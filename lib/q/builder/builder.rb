@@ -114,7 +114,19 @@ module Variables
     else
       args[0].string    
     end
-    "#{" "*ident}#{q == "self" ? "this" : q}"
+    "#{" "*ident}#{q == "super" ? "base" : (q == "self" ? "this" : q)}"
+  end
+end
+
+module Super
+  def build_str ident = 0
+    "#{" "*ident}base(#{args[0].build_str})"
+  end
+end
+
+module ZSuper
+  def build_str ident = 0
+    "#{" "*ident}base"
   end
 end
 
@@ -158,6 +170,45 @@ module Body
     @body_stmt.build_str(ident+(self.class.ancestors[1] == Program ? 0 : 2))
   end
 end
+
+
+module Construct
+  include Body
+  
+  def initialize *o
+    super
+    @body_stmt = args[2] unless is_a?(StaticConstruct) or is_a?(ClassConstruct)
+  end
+  
+  def build_str ident = 0
+    "#{tab = " "*ident}#{type ? type.to_s+" " : ""}construct {\n"+
+    body_stmt.build_str(ident+2)+
+    "\n#{tab}}"
+  end
+  
+  def type
+    return :static if is_a? StaticConstruct
+    return :class if is_a? ClassConstruct
+    return nil
+  end
+end
+
+module StaticConstruct
+  include Construct
+  def initialize *o
+    super
+    @body_stmt = args[4] 
+  end 
+end
+
+module ClassConstruct
+  include Construct
+  def initialize *o
+    super
+    @body_stmt = args[1] 
+  end  
+end
+
 
 module Program
   include Body
@@ -264,14 +315,25 @@ module Def
   include Declaration
   def initialize *o
     super
-   
-    @symbol    = args[0].build_str.to_sym
-    @body_stmt = args[2]
     
-    @parameters = args[1]
+    unless is_a?(Defs)
+      @symbol    = args[0].build_str.to_sym
+      @body_stmt = args[2]
     
-    if args[2].args[0].children[0].event == :symbol_literal
-      set_explicit_return(args[2].args[0].children.shift)
+      @parameters = args[1]
+    
+      if args[2].args[0].children[0].event == :symbol_literal
+        set_explicit_return(args[2].args[0].children.shift)
+      end
+    else
+      @symbol    = args[2].build_str.to_sym
+      @body_stmt = args[4]
+    
+      @parameters = args[3]
+        
+      if args[4].args[0].children[0].event == :symbol_literal
+        set_explicit_return(args[4].args[0].children.shift)
+      end
     end
   end
   
@@ -292,13 +354,53 @@ module Def
     super or "public"
   end
   
+  def get_scope
+    parent ? parent.get_scope : scope
+  end
+  
   def declare_scope
-    super or ""
+    super or (is_a?(Defs) ? "static" : nil)
   end
   
   def declare_kind
-    super or get_scope_type != :class ? "" : (declare_scope != "static" ? "virtual" : "")
+    n = nil
+    if (n = super)
+    elsif get_scope_type != :class
+      n = ""
+    elsif declare_scope != "static"
+      n = "virtual" 
+    else
+      n = ""
+    end
+
+    return n
   end
+end
+
+module Return0
+  def build_str ident = 0
+    (" "*ident) + "return" 
+  end
+end
+
+module Return
+  def build_str ident = 0
+    (" "*ident) + "return("+
+    args.map do |a| a.build_str(0).gsub(/\n$/,'') end.join(", ")+
+    ")"
+  end
+end
+
+module Next
+  def build_str ident = 0
+    (" "*ident) + "return("+
+    args.map do |a| a.build_str(0).gsub(/\n$/,'') end.join(", ")+
+    ")"
+  end    
+end 
+
+module Defs
+  include Def
 end
 
 module Namespace
@@ -729,10 +831,60 @@ module ConstPathRef
   end
 end
 
+module Constructor
+  include Defs
+  def self.match? *o
+    o[3].string == "new" or o[3].string =~ /^new_/
+  end
+  
+  def initialize *o
+    super
+    set_explicit_return "" 
+  end
+  
+  
+  def parented p
+    super
+    
+    pp = self
+    
+    until pp.is_a?(QSexp::Class)
+      pp = pp.parent
+      break unless pp
+    end
+    unless pp
+      puts "COMPILE ERROR - #{line}: Constructor declared outside of Class definition"
+      exit(127)
+    end
+    n = @symbol.to_s
+    n = "" if n == "new"
+    n = ".#{n.gsub(/^new\_/,'')}" if n =~ /^new/
+    @symbol = pp.name+"#{n}"
+  end
+  
+  def declare_scope
+    ""
+  end
+  
+  def declare_kind
+    ""
+  end
+  
+end
+
+module ARef
+  def build_str ident = 0
+    (" "*ident) +
+    args[0].build_str + "[" +
+    args[1].build_str +
+    "]"
+  end
+end
+
 module New
   attr_reader :method, :type
   def self.match? *o
-    (o[1].event == :var_ref or o[1].event == :const_path_ref) and o[3].string == "new"
+    (o[1].event == :var_ref or o[1].event == :const_path_ref) and (o[3].string == "new" or o[3].string =~ /^new_/)
   end
   
   def initialize *o

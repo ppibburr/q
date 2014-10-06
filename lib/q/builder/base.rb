@@ -145,6 +145,20 @@ module QSexp
         
         return construct(QSexp::Call, e, *o)
         
+      when :sclass
+        return construct(QSexp::ClassConstruct, e, *o)    
+        
+      when :defs
+        if o[3].string == "construct"
+          return construct(QSexp::StaticConstruct, e, *o)
+        end
+      
+        if Constructor.match?(*o)
+          return construct(QSexp::Constructor, e, *o)
+        end      
+      
+        return construct(QSexp::Defs, e, *o)  
+        
       when :method_add_arg
         construct(QSexp::MethodAddArg, e, *o)
         
@@ -162,9 +176,15 @@ module QSexp
             construct(QSexp::FCall, e, *o)  
           end
         end
+      when :aref
+        construct ARef, e, *o
       when :params
         construct(QSexp::Parameters, e, *o)   
       when :def
+        if o[1].string == "initialize"
+          return construct(Construct, e, *o)
+        end
+        
         construct(QSexp::Def, e, *o)       
       when :assign
         construct(QSexp::Assignment, e, *o)
@@ -185,7 +205,13 @@ module QSexp
           return construct(QSexp::MemberModifier, e, *o)
         end
         
-        construct(QSexp::VCall, e, *o)          
+        construct(QSexp::VCall, e, *o)         
+        
+      when :super
+        construct QSexp::Super, e, *o 
+      when :zsuper
+        construct QSexp::ZSuper, e, *o 
+                         
       when :string_literal
         construct(QSexp::String, e, *o)     
       when :dot2
@@ -206,6 +232,12 @@ module QSexp
         else
           construct(QSexp::FCall, e, *o) 
         end
+      when :return0
+        construct(QSexp::Return0, e, *o)
+      when :return
+        construct(QSexp::Return, e, *o)
+      when :next
+        construct(QSexp::Next, e, *o)            
       else
         return super
       end
@@ -229,7 +261,7 @@ module QSexp
 	  attr_reader :string
 	  def initialize e, l, t
 		  super(e, l)
-		  @string = t
+		  @string = t == "nil" ? "null" : t
 	  end
 	  
 	  def resolved_type
@@ -255,6 +287,8 @@ module QSexp
         :constant
       when :"@ident"
         :local
+      when :"@kw"
+        :keyword
       end
 	  end    
     
