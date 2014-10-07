@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+#
+# Wrapper combining `q` and `valac`
+#
+
+t=File.join(File.expand_path(File.dirname(__FILE__)), "q") + " #{ARGV[0]}"
+
+File.open(n="#{File.basename(ARGV[0]).gsub(/\.rb$/,'')}.vala", "w") do |f|
+  f.puts `#{t}`
+end
+
+system "valac #{n}"
+system "rm #{n}"
