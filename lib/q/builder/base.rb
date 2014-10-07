@@ -6,6 +6,14 @@ module QSexp
 	  	@line = l
 	  end
 	  
+    def mark_no_semicolon(bool = true)
+      @marked_no_sc = bool
+    end
+    
+    def marked_no_semicolon?
+      @marked_no_sc
+    end
+    
 	  def get_scope
 		p = self
 		until p.respond_to? :scope
@@ -65,7 +73,7 @@ module QSexp
 	class Statements
 	  include Node
 	  
-	  attr_reader :children
+	  attr_reader :children, :event
 	  
 	  def push i      
 		  (@children ||= []) << i
@@ -74,7 +82,7 @@ module QSexp
     def build_str ident=0
       str = ""
       children.each do |c|
-        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.is_a?(For) or c.is_a?(Each)) ? "" : ";"}\n"
+        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.is_a?(For) or c.is_a?(Each) or c.marked_no_semicolon?) ? "" : ";"}\n"
         str.replace("\n") if str.strip == ";"
       end if children
       str.gsub(/^;\n/,'')
@@ -144,6 +152,7 @@ module QSexp
         end        
         
         return construct(QSexp::Call, e, *o)
+
         
       when :sclass
         return construct(QSexp::ClassConstruct, e, *o)    
@@ -177,6 +186,9 @@ module QSexp
           end
         end
       when :aref
+        if GenericsTypeDeclaration.match? *o
+          return construct(GenericsTypeDeclaration, e, *o)
+        end
         construct ARef, e, *o
       when :params
         construct(QSexp::Parameters, e, *o)   
@@ -229,6 +241,8 @@ module QSexp
       when :command;
         if o[1].string == "namespace"
           construct(QSexp::Namespace, e, *o)
+        elsif ClassGenericsDeclaration.match? *o
+          construct ClassGenericsDeclaration, e, *o
         else
           construct(QSexp::FCall, e, *o) 
         end

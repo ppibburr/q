@@ -3,8 +3,23 @@ $: << File.expand_path(File.dirname(__FILE__))
 require 'ripper'
 
 require 'q/builder/base.rb'
-require 'q/ripper/qsexp'
-require 'q/builder/builder.rb'
+require 'q/ripper/qsexp.rb'
+require 'q/builder/scope.rb'
+require 'q/builder/body.rb'
+require 'q/builder/general.rb'
+require 'q/builder/calls.rb'
+require 'q/builder/variables.rb'
+require 'q/builder/modifiers.rb'
+require 'q/builder/block.rb'
+require 'q/builder/declaration.rb'
+require 'q/builder/assignment.rb'
+require 'q/builder/namespace.rb'
+require 'q/builder/parameters.rb'
+require 'q/builder/construct.rb'
+require 'q/builder/class.rb'
+require 'q/builder/method.rb'
+require 'q/builder/constructor.rb'
+require 'q/builder/new.rb'
 
 module QSexp
   BUFFER = []
