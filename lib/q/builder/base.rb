@@ -15,14 +15,14 @@ module QSexp
     end
     
 	  def get_scope
-		p = self
-		until p.respond_to? :scope
-		  p = p.parent
-		  break unless p
-		end
-
-        return p.scope
+      p = self
+      until p.respond_to? :scope
+        p = p.parent
+        break unless p
       end
+
+      return p.scope
+    end
       
       def get_scope_type
         if s=get_scope

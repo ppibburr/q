@@ -66,6 +66,8 @@ module QSexp
         get_scope.new_local(args[0].args[0].string, args[0].args[0].type)
         return "#{" "*ident}var "+args[0].build_str(0) + " = "+ args[1].build_str(args[1].is_a?(MethodAddBlock) ? ident : 0)
       end
+    rescue => e
+      raise e #"LINE: #{line}\n#{e}\n#{e.backtrace[0]}"
     end
     
     def declare_type(ident)

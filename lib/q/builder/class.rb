@@ -67,7 +67,11 @@ module QSexp
           exit(127) 
         end
         p.parent.parent.generics << self
-        p.children.delete(self)
+        i = p.children.index(self)
+        
+        def (p.children[i] = "").marked_no_semicolon?
+          true
+        end
       end
     end
     

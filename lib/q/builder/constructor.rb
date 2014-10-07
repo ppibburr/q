@@ -27,7 +27,7 @@ module QSexp
       n = @symbol.to_s
       n = "" if n == "new"
       n = ".#{n.gsub(/^new\_/,'')}" if n =~ /^new/
-      @symbol = pp.name+"#{n}"
+      @symbol = pp.name.gsub(/\<.*\>/,'')+"#{n}"
     end
     
     def declare_scope
