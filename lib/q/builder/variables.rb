@@ -13,6 +13,10 @@ module QSexp
       end
       "#{" "*ident}#{q == "super" ? "base" : (q == "self" ? "this" : q)}"
     end
+    
+    def type
+      args[0].type
+    end
   end
 
   module VarRef

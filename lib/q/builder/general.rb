@@ -253,8 +253,12 @@ module QSexp
 
 
   module ConstPathRef
-    def build_str
+    def build_str ident = 0
       args.map do |a| a.build_str end.join(".")
+    end
+    
+    def resolved_type
+      build_str
     end
   end
 
