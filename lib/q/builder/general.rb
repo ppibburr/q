@@ -201,7 +201,7 @@ module QSexp
       "#{" "*ident}#{self}"
     end
     def parented *o
-    
+     
     end
   end
 

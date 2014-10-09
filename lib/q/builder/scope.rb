@@ -14,6 +14,10 @@ module QSexp
     def new_local fld, type
       @lvars[fld] = type
     end
+    
+    def [] k
+      @lvars[k]
+    end
   end
 
   class ClassScope < Scope

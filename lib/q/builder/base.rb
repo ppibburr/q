@@ -1,4 +1,9 @@
 module QSexp
+   def self.compile_error line, msg
+     puts "LINE: #{line} - #{msg}"
+     exit 1
+   end
+
 	module Node
 	  attr_accessor :parent, :line
 	  def initialize l, p = nil
@@ -135,6 +140,8 @@ module QSexp
     
     def self.new e, *o
       case e
+      when :symbol_literal
+        return construct(QSexp::DeclaredType, e ,*o)
       when :const_path_ref
         construct QSexp::ConstPathRef, e, *o
       when :binary

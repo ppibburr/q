@@ -32,14 +32,15 @@ module QSexp
   module GenericsTypeDeclaration
     include ARef
     def self.match? *o
-      ( o[1].event == :symbol_literal or o[1].args[0].type == :constant) and o[2].args[0].children[0].event == :symbol_literal
+      o[2].args[0].parented nil
+      ( o[1].event == :symbol_literal or o[1].args[1].type == :constant) and o[2].args[0].children[0].is_a?(TypeDeclarationRoot)
     rescue
       nil
     end
     
     def build_str(ident = 0)
       "#{" "*ident}" + args[0].build_str + "<" +
-      args[1].args[0].children.map do |c| c.build_str end.join(", ") +
+      args[1].args[0].children.map do |c| c.type end.join(", ") +
       ">"
     end
     

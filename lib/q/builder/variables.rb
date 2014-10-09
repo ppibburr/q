@@ -17,6 +17,10 @@ module QSexp
     def type
       args[0].type
     end
+    
+    def name
+      build_str
+    end
   end
 
   module VarRef
