@@ -282,6 +282,7 @@ module QSexp
 	  attr_reader :string
 	  def initialize e, l, t
 		  super(e, l)
+		 
 		  @string = t == "nil" ? "null" : t
 	  end
 	  

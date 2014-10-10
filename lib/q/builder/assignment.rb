@@ -32,8 +32,12 @@ module QSexp
         
         when :static
           return assign_static(ident, declare)
+          
         when :class
           return assign_class(ident, declare)
+        
+        when :instance
+          return assign_instance(ident, declare)        
         else
         end
       else
@@ -111,7 +115,7 @@ module QSexp
       when 1
         "#{" "*ident}protected static #{type} #{name}"
       when 2
-        "#{" "*ident}protected static #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : ""}"
+        "#{" "*ident}protected static #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
       when 3
         "#{" "*ident}protected static #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
       else
@@ -133,12 +137,34 @@ module QSexp
       when 1
         "#{" "*ident}protected class #{type} #{name}"
       when 2
-        "#{" "*ident}protected class #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : ""}"
+        "#{" "*ident}protected class #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
       when 3
         "#{" "*ident}protected class #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
       else
       
       end
     end    
+  
+    def assign_instance ident, declare
+      if declare > 0 and [:program, :generic].index(get_scope_type)
+        QSexp.compile_error line, "[instance] Field declaration outside of container root body"
+      end
+      
+      name = args[0].build_str
+      type = args[1].type if declare > 0
+      
+      case declare
+      when 0
+        "#{" "*ident}#{name} = #{args[1].build_str}"
+      when 1
+        "#{" "*ident}public #{type} #{name}"
+      when 2
+        "#{" "*ident}public #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
+      when 3
+        "#{" "*ident}public #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
+      else
+      
+      end
+    end   
   end
 end

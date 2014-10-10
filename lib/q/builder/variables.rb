@@ -1,6 +1,6 @@
 module QSexp
   module Variables
-    def build_str ident=0
+    def build_str ident=0;
       q = case args[0].type
       when :static
         args[0].string.gsub("@@",'')
