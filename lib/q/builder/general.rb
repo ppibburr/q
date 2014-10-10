@@ -251,6 +251,16 @@ module QSexp
     end
   end
 
+  module XString
+    def build_str ident = 0
+      super
+    end
+    
+    def type
+      build_str
+    end
+  end
+  
 
   module ConstPathRef
     def build_str ident = 0

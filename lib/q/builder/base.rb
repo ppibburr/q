@@ -253,6 +253,8 @@ module QSexp
         else
           construct(QSexp::FCall, e, *o) 
         end
+      when :xstring
+        construct(QSexp::XString, e, *o)
       when :return0
         construct(QSexp::Return0, e, *o)
       when :return
