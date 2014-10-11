@@ -6,7 +6,10 @@ module QSexp
       :override,
       :replace,
       :delegate,
-      :static
+      :static,
+      :private,
+      :public,
+      :protected
     ]
     
     include VCall
@@ -31,10 +34,10 @@ module QSexp
       
       on_parented do |p|
         if :generic == p.get_scope_type
-          raise "wrong scope for member modifier"
+          QSexp.compile_error line, "wrong scope for member modifier"
         end
 
-        raise "cannot use member modifier here" unless p.is_a?(Statements)
+        QSexp.compile_error(line, "cannot use member modifier here") unless p.is_a?(Statements)
         
         i = p.children.index(self)
         
@@ -46,8 +49,8 @@ module QSexp
           next
         end
         
-        unless n.is_a?(Assignment) or n.is_a?(Def) or n.is_a?(MemberModifier)
-          raise "Member Modifier has invalid target: #{n.event}"
+        unless n.is_a?(Assignment) or n.is_a?(Def) or n.is_a?(MemberModifier) or n.is_a?(Property) or n.args[1].is_a?(Property)
+          QSexp.compile_error line, "Member Modifier has invalid target: #{n.event}"
         end
         
         n.set_modifier(self)

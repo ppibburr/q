@@ -114,11 +114,11 @@ module QSexp
       when 0
         "#{" "*ident}#{name} = #{args[1].build_str}"
       when 1
-        "#{" "*ident}protected static #{type} #{name}"
+        "#{" "*ident}#{get_access(:static)} static #{type} #{name}"
       when 2
-        "#{" "*ident}protected static #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
+        "#{" "*ident}#{get_access(:static)} static #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
       when 3
-        "#{" "*ident}protected static #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
+        "#{" "*ident}#{get_access(:static)} static #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
       else
       
       end
@@ -136,11 +136,11 @@ module QSexp
       when 0
         "#{" "*ident}#{name} = #{args[1].build_str}"
       when 1
-        "#{" "*ident}protected class #{type} #{name}"
+        "#{" "*ident}#{get_access(:class)} class #{type} #{name}"
       when 2
-        "#{" "*ident}protected class #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
+        "#{" "*ident}#{get_access(:class)} class #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
       when 3
-        "#{" "*ident}protected class #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
+        "#{" "*ident}#{get_access(:class)} class #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
       else
       
       end
@@ -158,14 +158,18 @@ module QSexp
       when 0
         "#{" "*ident}#{name} = #{args[1].build_str}"
       when 1
-        "#{" "*ident}public #{type} #{name}"
+        "#{" "*ident}#{get_access(:instance)} #{type} #{name}"
       when 2
-        "#{" "*ident}public #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
+        "#{" "*ident}#{get_access(:instance)} #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
       when 3
-        "#{" "*ident}public #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
+        "#{" "*ident}#{get_access(:instance)} #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
       else
       
       end
+    end
+    
+    def get_access kind
+      super() || kind == :instance ? "public" : "protected"
     end   
   end
 end

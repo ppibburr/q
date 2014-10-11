@@ -4,6 +4,8 @@ module QSexp::Property
   end
   
   
+  include QSexp::Declaration
+  
   attr_reader :type, :name, :body_stmt, :default
   def initialize *o
     super
@@ -45,8 +47,18 @@ module QSexp::Property
   
   
   include QSexp::Body
+  
+  def get_access
+    super || "public"
+  end
+  
+  def declare_scope
+    n = super
+    n ? n+" " : ""
+  end
+  
   def build_str ident = 0
-    l = "#{tab = (" "*ident)}public #{type} #{name} {"
+    l = "#{tab = (" "*ident)}#{get_access} #{declare_scope}#{type} #{name} {"
     
     if @block_stmt
       l += "\n" + 
