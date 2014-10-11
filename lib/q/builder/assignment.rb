@@ -39,9 +39,10 @@ module QSexp
         when :instance
           return assign_instance(ident, declare)        
         else
+          
         end
       else
-      
+        return "#{(" ")*ident}#{args[0].build_str} = #{args[1].build_str}"
       end
     end
     

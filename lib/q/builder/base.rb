@@ -139,6 +139,10 @@ module QSexp
     ]
     
     def self.new e, *o
+      if QSexp::Property.match? e, *o
+        return construct(QSexp::Property, e, *o)
+      end
+    
       case e
       when :symbol_literal
         return construct(QSexp::DeclaredType, e ,*o)

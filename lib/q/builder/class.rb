@@ -39,6 +39,8 @@ module QSexp
           # superclass
           raise "#{line}: Invalid inheritance" unless args[1].args[0].type == :constant
           @super_class = args[1].build_str
+        when :const_path_ref
+          @super_class = args[1].build_str
         else
           raise "#{line}: Invalid inheritance"
         end

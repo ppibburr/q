@@ -3,6 +3,20 @@
 # Wrapper combining `q` and `valac`
 #
 
+require 'optparse'
+
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: example.rb [options]"
+
+  opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+    options[:verbose] = v
+  end
+end.parse!
+
+p options
+p ARGV
+
 t=File.join(File.expand_path(File.dirname(__FILE__)), "q") + " #{ARGV[0]}"
 
 File.open(n="#{File.basename(ARGV[0]).gsub(/\.rb$/,'')}.vala", "w") do |f|
