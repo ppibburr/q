@@ -9,6 +9,10 @@ module QSexp
         @last = args[1].build_str
       end
     end
+    
+    def build_str ident = 0
+      (" "*ident)+"#{start}:#{last}"
+    end
   end
 
   module For
@@ -31,7 +35,7 @@ module QSexp
     def build_str ident = 0
       "\n#{" "*ident}for (#{type || :int} #{name} = #{low}; #{name} <= #{high}; #{name}++) {\n"+
         args[2].build_str(ident+2)+
-      "\n#{" "*ident}}"
+      "\n#{" "*ident}}\n"
     end
   end
 
@@ -74,6 +78,7 @@ module QSexp
     attr_reader :else_stmt
     def initialize *o
       super
+      mark_no_semicolon true
       @else_stmt = args[2]
     end
     
@@ -92,7 +97,6 @@ module QSexp
 
   module If
     include IfElse
-    
     def build_str ident = 0
       "\n#{tab=" "*ident}" + super
     end
@@ -229,8 +233,51 @@ module QSexp
   end
 
   module String
+    def is_template?
+      args[0].args.find do |a| a.is_a?(StringEmbedExpr) end
+    end
+  
     def build_str  ident=0
-      '"'+super(ident)+'"'
+      (" "*ident)+"#{is_template? ? "@" : ""}\"" +
+      args[0].args.map do |c| c.build_str().gsub(";\n",'') end.join+
+      "\""
+    end
+  end
+  
+  module Break
+    def build_str ident = 0
+      (" "*ident)+"break"
+    end
+  end
+  
+  module OPAssign
+    def build_str ident = 0
+      (" "*ident) +
+      args.map do |a| a.build_str() end.join(" ")
+    end
+  end
+  
+  module While
+    def build_str ident = 0
+      "\n"+(tab=" "*ident)+"while ("+
+      args[0].build_str() + ") {\n" +
+      args[1].build_str(ident+2) +
+      tab+"}\n\n"
+    end
+  end
+  
+  module IFOP
+    def build_str ident = 0
+      (" "*ident) +
+      args[0].build_str() + " ? " +
+      args[1].build_str() + " : " +
+      args[2].build_str()
+    end
+  end
+  
+  module StringEmbedExpr
+    def build_str ident = 0
+      (" "*ident)+"$("+super+")"
     end
   end
 
@@ -252,11 +299,19 @@ module QSexp
   end
 
   module XString
-    def build_str ident = 0
-      super
+    def build_str ident = 0; exit
+      args[0].children[0].string
     end
     
     def type
+      build_str
+    end
+    
+    def name
+      build_str
+    end
+    
+    def string
       build_str
     end
   end

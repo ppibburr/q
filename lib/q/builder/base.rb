@@ -141,6 +141,10 @@ module QSexp
     def self.new e, *o
       if QSexp::Property.match? e, *o
         return construct(QSexp::Property, e, *o)
+      elsif QSexp::Ref.match?(e,*o)
+        return construct(QSexp::Ref, e, *o)
+      elsif QSexp::Out.match?(e,*o)
+        return construct(QSexp::Out, e, *o)        
       end
     
       case e
@@ -234,7 +238,16 @@ module QSexp
         construct QSexp::Super, e, *o 
       when :zsuper
         construct QSexp::ZSuper, e, *o 
-                         
+      when :while
+        construct QSexp::While, e,*o  
+      when :opassign
+        construct(QSexp::OPAssign, e ,*o)
+      when :ifop
+        construct QSexp::IFOP, e,*o                
+      when :break
+        construct QSexp::Break, e,*o       
+      when :string_embexpr
+        construct QSexp::StringEmbedExpr, e,*o                   
       when :string_literal
         construct(QSexp::String, e, *o)     
       when :dot2
@@ -257,7 +270,7 @@ module QSexp
         else
           construct(QSexp::FCall, e, *o) 
         end
-      when :xstring
+      when :xstring_lireral
         construct(QSexp::XString, e, *o)
       when :return0
         construct(QSexp::Return0, e, *o)

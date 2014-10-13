@@ -15,7 +15,7 @@ module QSexp
     def build_str ident = 0
       if args[2].string == "each"
         "\n#{" "*ident}foreach (#{parent.args[1].build_str.gsub(";\n",'')} #{parent.parent.args[1].parameters.untyped_parameters[0].build_str} in #{args[0].build_str})"+
-        " {\n#{parent.parent.args[1].body_stmt.build_str(ident+2)}#{" "*ident}}"
+        " {\n#{parent.parent.args[1].body_stmt.build_str(ident+2)}#{" "*ident}}\n"
       else
         super
       end

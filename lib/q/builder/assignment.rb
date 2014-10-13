@@ -98,7 +98,7 @@ module QSexp
         
       elsif !type
         # assignment
-        tab + "#{name} = #{args[1].build_str(ident)}"
+        tab + "#{name} = #{args[1].build_str(ident).gsub(Regexp.new("^#{tab}"),'')}"
       end
     end
     

@@ -22,6 +22,7 @@ require 'q/builder/class.rb'
 require 'q/builder/method.rb'
 require 'q/builder/constructor.rb'
 require 'q/builder/new.rb'
+require 'q/builder/ref.rb'
 
 module QSexp
   BUFFER = []
