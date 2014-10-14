@@ -130,12 +130,14 @@ module QSexp
     CASTS = [
       :char,
       :uchar,
-      :int,
-      :uint,
+      :int,  :int8,
+      :uint, :uint8,
       :long,
+      :ulong,
       :flt,
       :double,
-      :string
+      :string,
+      :bool
     ]
     
     def self.new e, *o
@@ -156,10 +158,10 @@ module QSexp
         construct QSexp::Binary, e, *o
       when :call
         
-        if o[1].is_a?(Single) and o[3].event == :"@ident" and ["d","f", "l"].index(o[3].string)
-          if [:float, :int].index(o[1].resolved_type)
+        if o[3].event == :"@ident" and ["d","f", "l"].index(o[3].string)
+          #if [:float, :int].index(o[1].resolved_type)
             return construct(QSexp::Numeric, e, *o)
-          end
+          #end
         end
         
         if New.match?(*o)

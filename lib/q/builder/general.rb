@@ -228,7 +228,7 @@ module QSexp
     end
     
     def build_str ident = 0
-      "#{" "*ident}#{args[0].string}#{args[2].string}"
+      "#{" "*ident}#{args[0].build_str}#{args[2].string}".gsub(/\-\@/,'-')
     end
   end
 
