@@ -134,7 +134,7 @@ module QSexp
       :uint, :uint8,
       :long,
       :ulong,
-      :flt,
+      :float,
       :double,
       :string,
       :bool

@@ -33,12 +33,16 @@ module QSexp
     
     def build_str(ident=0)
       "\n#{" "*ident}#{get_access()} #{declare_scope()} #{declare_kind()} #{return_type || "void"} #{symbol}("+parameters.build_str+")"+
-      (delegate? ? ";" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
+      ((delegate? or signal?) ? ";" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
     end
     
     def delegate?
       @modifier and @modifier[:delegate]
     end
+    
+    def signal?
+      @modifier and @modifier[:signal]
+    end    
     
     def get_access
       super or "public"

@@ -9,7 +9,8 @@ module QSexp
       :static,
       :private,
       :public,
-      :protected
+      :protected,
+      :signal
     ]
     
     include VCall

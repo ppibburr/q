@@ -18,7 +18,8 @@ module QSexp
         return "virtual"     if @modifier[:virtual]
         return "override"    if @modifier[:override]            
         return "new"         if @modifier[:replace]
-        return "delegate"    if @modifier[:delegate]      
+        return "delegate"    if @modifier[:delegate]  
+        return "signal"    if @modifier[:signal]               
       end    
     end
     
