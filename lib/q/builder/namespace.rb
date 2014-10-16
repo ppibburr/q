@@ -7,11 +7,11 @@ module QSexp
       
       on_parented do |p|
         @name = parent.args[0].args[1].args[0].children[0].args[0].build_str
-        @body_stmt = parent.args.delete_at(1)
+        @body_stmt = parent.args.delete_at(1)        
+        @body_stmt.scope = self.scope       
         @body_stmt.parented(self)
         parent.args[0] = self
         @args = []
-        @body_stmt.scope = self.scope
         
         pp = p
         until pp.event == :method_add_block

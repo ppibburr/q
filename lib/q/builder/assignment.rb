@@ -73,8 +73,12 @@ module QSexp
     end
     
     def assign_local ident, declare
-      QSexp.compile_error line, "Local Variable Assignment outside of block." unless [:program, :generic].index(get_scope_type) 
-    
+      if :namespace != get_scope_type
+        QSexp.compile_error line, "Local Variable Assignment outside of block." unless [:program, :generic].index(get_scope_type) 
+      else
+        return assign_namespace ident, declare
+      end
+      
       name       = args[0].name
       
       type = check_do_new_local(name, declare)
@@ -102,6 +106,26 @@ module QSexp
       end
     end
     
+    def assign_namespace ident, declare
+      name = args[0].build_str
+      type = args[1].type if declare > 0
+      
+      case declare
+      when 0
+        type = derive_type
+        "#{" "*ident}#{get_access(:namespace)} #{type} #{name} = #{args[1].build_str()}"  
+
+      when 1
+        "#{" "*ident}#{get_access(:namespace)} #{type} #{name}"
+      when 2
+        "#{" "*ident}#{get_access(:namespace)} #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
+      when 3
+        "#{" "*ident}#{get_access(:namespace)} #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
+      else
+      
+      end
+    end    
+    
     def assign_static ident, declare
       if declare > 0 and [:program, :generic].index(get_scope_type)
         QSexp.compile_error line, "[static] Field declaration outside of container root body"
@@ -112,7 +136,13 @@ module QSexp
       
       case declare
       when 0
-        "#{" "*ident}#{name} = #{args[1].build_str}"
+        case get_scope_type
+        when :class
+          type = derive_type
+          "#{" "*ident}#{get_access(:static)} #{type} #{name} = #{args[1].build_str()}"  
+        else
+          "#{" "*ident}#{name} = #{args[1].build_str}"
+        end
       when 1
         "#{" "*ident}#{get_access(:static)} static #{type} #{name}"
       when 2
@@ -134,7 +164,13 @@ module QSexp
       
       case declare
       when 0
-        "#{" "*ident}#{name} = #{args[1].build_str}"
+        case get_scope_type
+        when :class
+          type = derive_type
+          "#{" "*ident}#{get_access(:class)} #{type} #{name} = #{args[1].build_str()}"  
+        else
+          "#{" "*ident}#{name} = #{args[1].build_str}"
+        end
       when 1
         "#{" "*ident}#{get_access(:class)} class #{type} #{name}"
       when 2
@@ -156,7 +192,13 @@ module QSexp
       
       case declare
       when 0
-        "#{" "*ident}#{name} = #{args[1].build_str}"
+        case get_scope_type
+        when :class
+          type = derive_type
+          "#{" "*ident}#{get_access(:instance)} #{type} #{name} = #{args[1].build_str()}"  
+        else
+          "#{" "*ident}#{name} = #{args[1].build_str}"
+        end
       when 1
         "#{" "*ident}#{get_access(:instance)} #{type} #{name}"
       when 2
@@ -171,5 +213,14 @@ module QSexp
     def get_access kind
       super() || kind == :instance ? "public" : "protected"
     end   
+    
+    def derive_type
+      if args[1].is_a?(Single) or args[1].is_a?(Numeric) or str=args[1].is_a?(QSexp::String)
+        return :string if str
+        return args[1].resolved_type
+      end
+      
+      QSexp.compile_error line, "Cannot determine type of `#{args[1].event}'"
+    end
   end
 end

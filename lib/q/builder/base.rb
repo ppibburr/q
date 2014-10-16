@@ -21,6 +21,7 @@ module QSexp
     
 	  def get_scope
       p = self
+  
       until p.respond_to? :scope
         p = p.parent
         break unless p
@@ -312,7 +313,7 @@ module QSexp
 	    when :"@int"
 	      :int
 	    when :"@float"
-	      :float
+	      :double
 	    when :"string_literal"
 	      :string
 	    end

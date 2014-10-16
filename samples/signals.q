@@ -1,21 +1,34 @@
-class Foo < Object
-  signal;
-  def bar(); end
+namespace Quux do
+  class Foo < Object
+    signal;
+    def bar(); end
   
-  signal;
-  def quux(); end
+    signal;
+    def quux(i:int); end
   
-  def moof()
-    bar();
+    @number = 5
+  
+    def moof()
+      bar();
+      quux(8)
+    end
   end
-end
 
-def main()
-  foo = Foo.new()
+  def main()
+    foo = Foo.new()
   
-  foo.bar.connect() do
-    print("Signal closure called!\n")
+    foo.bar.connect() do
+      print("Signal closure called!\n")
+    end
+  
+    foo.quux.connect() do |src, i|
+      print("src.number: %d\ni: %d\n", src.number, i)
+    end
+    
+    foo.quux.connect() do |i|
+      print("And we can omit the source:\ni: %d\n",  i)
+    end    
+  
+    foo.moof()
   end
-  
-  foo.moof()
 end
