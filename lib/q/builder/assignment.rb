@@ -37,7 +37,11 @@ module QSexp
           return assign_class(ident, declare)
         
         when :instance
-          return assign_instance(ident, declare)        
+          return assign_instance(ident, declare)  
+          
+        when :constant
+          return assign_constant(ident, declare)  
+            
         else
           
         end
@@ -69,7 +73,7 @@ module QSexp
         return v.type
       end
       
-      return :simple
+      return :simple unless args[1].event == :hash
     end
     
     def assign_local ident, declare
@@ -100,11 +104,38 @@ module QSexp
         # simple `var' declaration
         tab + "var #{name} = #{args[1].build_str}"
         
+      elsif !type and declare == 0 and args[1].event == :hash
+        type = derive_type
+        tab + "#{type} #{name} = #{args[1].build_str}"
       elsif !type
         # assignment
         tab + "#{name} = #{args[1].build_str(ident).gsub(Regexp.new("^#{tab}"),'')}"
       end
     end
+
+    def assign_constant ident, declare
+      if declare > 0 and [:program, :generic].index(get_scope_type)
+        QSexp.compile_error line, "[constant] Field declaration outside allowed body type"
+      end
+
+      name = args[0].build_str
+      type = args[1].type if declare > 0
+      
+      case declare
+      when 0
+        type = derive_type
+        "#{" "*ident}#{get_access(:constant)} const #{type} #{name} = #{args[1].build_str()}"  
+
+      when 1
+         QSexp::compile_error line, "Constant declaration without assignment."
+      when 2
+        "#{" "*ident}#{get_access(:constant)} const #{type}[]#{args[1].length != "" ? " #{name} = new #{type}[#{args[1].length}]" : " #{name}"}"
+      when 3
+        "#{" "*ident}#{get_access(:constant)} const #{type}[] #{name} = new #{type}[] {#{args[1].value}}"
+      else
+      
+      end
+    end 
     
     def assign_namespace ident, declare
       name = args[0].build_str
@@ -211,13 +242,21 @@ module QSexp
     end
     
     def get_access kind
-      super() || kind == :instance ? "public" : "protected"
+      super() || (kind == :instance or kind == :constant) ? "public" : "protected"
     end   
     
     def derive_type
       if args[1].is_a?(Single) or args[1].is_a?(Numeric) or str=args[1].is_a?(QSexp::String)
         return :string if str
         return args[1].resolved_type
+      end
+      
+      if args[1].event == :hash
+        if args[1].args[0].args[0].length == 1
+          assoc = args[1].args[0].args[0][0]
+          args[1] = assoc.args[0]
+          return assoc.args[1].build_str().gsub(":",'')
+        end
       end
       
       QSexp.compile_error line, "Cannot determine type of `#{args[1].event}'"
