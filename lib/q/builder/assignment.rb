@@ -260,6 +260,8 @@ module QSexp
       end
       
       QSexp.compile_error line, "Cannot determine type of `#{args[1].event}'"
+    rescue => e
+      QSexp.compile_error line, "Cannot determine type of `#{args[1].event}'"    
     end
   end
 end

@@ -130,6 +130,19 @@ module QSexp
       ")"
     end
   end
+  
+  module Yield0
+    def build_str ident = 0
+      (" "*ident) + "yield" 
+    end
+  end
+
+  module Yield
+    def build_str ident = 0
+      (" "*ident) + "yield "+
+      args.map do |a| a.build_str(0).gsub(/\n$/,'') end.join(", ")
+    end
+  end  
 
   module Next
     def build_str ident = 0
@@ -299,7 +312,7 @@ module QSexp
   end
 
   module XString
-    def build_str ident = 0; exit
+    def build_str ident = 0
       args[0].children[0].string
     end
     

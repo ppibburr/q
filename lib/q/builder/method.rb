@@ -32,7 +32,7 @@ module QSexp
     end
     
     def build_str(ident=0)
-      "\n#{" "*ident}#{get_access()} #{declare_scope()} #{declare_kind()} #{return_type || "void"} #{symbol}("+parameters.build_str+")"+
+      "\n#{" "*ident}#{get_access()} #{declare_scope()} #{declare_kind()}#{declare_special} #{return_type || "void"} #{symbol}("+parameters.build_str+")"+
       ((delegate? or signal?) ? ";" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
     end
     
@@ -43,6 +43,10 @@ module QSexp
     def signal?
       @modifier and @modifier[:signal]
     end    
+ 
+    def async?
+      @modifier and @modifier[:async]    
+    end
     
     def get_access
       super or "public"
@@ -68,6 +72,11 @@ module QSexp
       end
 
       return n
+    end
+    
+    def declare_special
+      r = super
+      r ? " #{r}" : ""
     end
   end
 

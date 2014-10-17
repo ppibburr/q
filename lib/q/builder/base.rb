@@ -138,7 +138,9 @@ module QSexp
       :float,
       :double,
       :string,
-      :bool
+      :bool,
+      :owned,
+      :unowned
     ]
     
     def self.new e, *o
@@ -275,6 +277,10 @@ module QSexp
         end
       when :xstring_lireral
         construct(QSexp::XString, e, *o)
+      when :yield0
+        construct(QSexp::Yield0, e, *o)
+      when :yield
+        construct(QSexp::Yield, e, *o)        
       when :return0
         construct(QSexp::Return0, e, *o)
       when :return
@@ -284,6 +290,8 @@ module QSexp
       else
         return super
       end
+    rescue
+      QSexp.compile_error o[0], "error on #{e} ..."
     end
     
     def self.construct mod, e, *o

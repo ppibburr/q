@@ -17,10 +17,16 @@ module QSexp
         return "abstract"    if @modifier[:abstract]
         return "virtual"     if @modifier[:virtual]
         return "override"    if @modifier[:override]            
-        return "new"         if @modifier[:replace]
-        return "delegate"    if @modifier[:delegate]  
-        return "signal"    if @modifier[:signal]               
+        return "new"         if @modifier[:replace]                    
       end    
+    end
+    
+    def declare_special
+      if @modifier    
+        return "delegate"    if @modifier[:delegate]  
+        return "signal"      if @modifier[:signal]   
+        return "async"      if @modifier[:async]     
+      end   
     end
     
     def declare_scope
