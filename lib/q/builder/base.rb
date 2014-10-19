@@ -38,6 +38,8 @@ module QSexp
             scope = :namespace   
           elsif s.is_a?(ProgramScope)
             scope = :program      
+          elsif s.is_a?(InitializerScope)
+            scope = :initializer
           else
             scope = :generic
           end
@@ -87,8 +89,11 @@ module QSexp
     
     def build_str ident=0
       str = ""
+      l = children.length-1
+      i = -1
       children.each do |c|
-        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.is_a?(For) or c.is_a?(Each) or c.marked_no_semicolon?) ? "" : ";"}\n"
+        i+=1
+        str << c.build_str(ident).to_s+"#{(c.is_a?(Body) or c.is_a?(For) or c.is_a?(Each) or c.marked_no_semicolon?) ? "" : "#{(parent.is_a?(InitializerBlock)) ? "#{i==l ? "" : ","}" : ";"}"}\n"
         str.replace("\n") if str.strip == ";"
       end if children
       str.gsub(/^;\n/,'')
@@ -175,6 +180,10 @@ module QSexp
 
         
       when :sclass
+        if o[1].event == :method_add_block
+          exit
+        end
+      
         return construct(QSexp::ClassConstruct, e, *o)    
         
       when :defs
@@ -194,7 +203,8 @@ module QSexp
       when :method_add_block
         construct(QSexp::MethodAddBlock, e, *o)
         
-        
+      when :brace_block
+        construct QSexp::InitializerBlock, e, *o  
       when :fcall
         if o[1].type == :local
           if CASTS.index(o[1].string.to_sym)
@@ -204,6 +214,8 @@ module QSexp
           else
             construct(QSexp::FCall, e, *o)  
           end
+        else
+          construct(QSexp::FCall, e, *o)
         end
       when :aref
         if GenericsTypeDeclaration.match? *o

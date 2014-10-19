@@ -9,6 +9,8 @@ module QSexp
         @scope = NamespaceScope.new(self)
       elsif is_a?(Program);
         @scope = ProgramScope.new(self)
+      elsif is_a?(InitializerBlock)
+        @scope = InitializerScope.new(self)
       else
         @scope = Scope.new(self)
       end

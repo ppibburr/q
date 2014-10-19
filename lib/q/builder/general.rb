@@ -179,8 +179,13 @@ module QSexp
     def build_str ident = 0
       if args.length > 1
         s=args[0].build_str(ident)
-        s=s.gsub(/\)$/,", ")+args[1].build_str(ident)+")"
-
+        
+        unless args[1].is_a?(InitializerBlock)
+          s=s.gsub(/\)$/,", ")+args[1].build_str(ident)+")"
+        else
+          s << " " + args[1].build_str(ident+2)
+        end
+        
         # proc block to closure
         if !args[0].args[0]
           s=s.strip.gsub(/\(, /,'').gsub(/}\)$/,"}").gsub(Regexp.new("^#{" "*(ident*2)}"),'    ')
@@ -199,6 +204,24 @@ module QSexp
   end
 
 
+  module EnumDeclaration
+    def assignments
+      args[0].find_all do |q| q.event == :assign end
+    end
+    
+    def assignments_valid?
+      z = assignments.find do |q| q.args[0].type != :constant end
+      
+      return true unless z
+      
+      QSexp.compile_error z.line, "Enum Members must be CONSTANT."
+    end
+    
+    def build_str ident = 0
+      assignments_valid?
+    end
+  end
+
   class ::Object
     def build_str(ident=0)
       ""
@@ -211,6 +234,20 @@ module QSexp
         a.parented q
       end
     end
+  end
+
+  module InitializerBlock
+    include Body
+    def initialize *o
+      super
+      @body_stmt = args[1]
+    end
+    
+    def build_str ident = 0
+      "{\n" +
+      @body_stmt.build_str(ident+2).gsub(/^\n/,'') +
+      (" "*ident) + "}\n\n"
+    end    
   end
 
   class ::Symbol  

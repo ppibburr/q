@@ -56,6 +56,10 @@ module QSexp
       !!@struct
     end
     
+    def is_enum?
+      !!@enum
+    end
+    
     def get_type
       return :struct if is_struct?
       return :enum   if is_enum?

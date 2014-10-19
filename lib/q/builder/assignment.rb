@@ -76,8 +76,16 @@ module QSexp
       return :simple unless args[1].event == :hash
     end
     
+    def assign_initializer ident
+      (" "*ident) + "#{args[0].build_str} = #{args[1].build_str(ident).gsub(Regexp.new("^#{(" "*ident)}"),'')}"
+    end
+    
     def assign_local ident, declare
       if :namespace != get_scope_type
+        if get_scope_type == :initializer
+          return assign_initializer ident
+        end
+              
         QSexp.compile_error line, "Local Variable Assignment outside of block." unless [:program, :generic].index(get_scope_type) 
       else
         return assign_namespace ident, declare

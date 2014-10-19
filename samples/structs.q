@@ -1,14 +1,17 @@
 class N < {
-  foo:int
+  foo:int,
+  bar:string
 }
 
-  def r();
-  
+  def r():int;
+    return(@foo)
   end;
 end
 
 def main()
-  n = `N()`
-  n.foo = 1
-  print("#{n.foo}\n")
+  n = N() {
+    foo = 9
+    bar = "bar"
+  }
+  print("#{n.foo}\n#{n.bar}\n#{n.r()}\n")
 end

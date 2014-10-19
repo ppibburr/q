@@ -28,4 +28,10 @@ module QSexp
 
   class ProgramScope < Scope
   end
+  
+  class InitializerScope < Scope
+    def new_local *o
+      raise "Initializers have no local scope."
+    end
+  end
 end
