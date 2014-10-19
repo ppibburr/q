@@ -66,12 +66,21 @@ module QSexp
       elsif get_scope_type != :class
         n = ""
       elsif declare_scope != "static"
-        n = "virtual" 
+        case get_class_type
+        when :class
+          "virtual"
+        else
+          ""
+        end 
       else
         n = ""
       end
 
       return n
+    end
+    
+    def get_class_type
+     return parent.parent.parent.get_type
     end
     
     def declare_special

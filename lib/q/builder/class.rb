@@ -41,6 +41,9 @@ module QSexp
           @super_class = args[1].build_str
         when :const_path_ref
           @super_class = args[1].build_str
+        
+        when :hash
+          @struct = true
         else
           raise "#{line}: Invalid inheritance"
         end
@@ -49,8 +52,25 @@ module QSexp
       @body_stmt = args[2]
     end
     
+    def is_struct?
+      !!@struct
+    end
+    
+    def get_type
+      return :struct if is_struct?
+      return :enum   if is_enum?
+      return :class      
+    end
+    
+    def define_struct ident
+      args[1].args[0].args[0].map.each do |c|
+        (" "*ident) + c.args[1].build_str() + " " + c.args[0].build_str().gsub(":",'')+";"
+      end.join("\n")
+    end
+    
     def build_str ident = 0
-      "\n#{" "*ident}public class #{name}#{super_class ? " : #{super_class}" : ""}#{implements ? (super_class ? ", " : " : ")+implements : ""} {\n"+
+      "\n#{" "*ident}public #{get_type} #{name}#{super_class ? " : #{super_class}" : ""}#{implements ? (super_class ? ", " : " : ")+implements : ""} {\n"+
+      "#{is_struct? ? define_struct(ident+2)+"\n" : ""}"+
       super(ident)+
       "\n#{" "*ident}}"
     end
@@ -65,9 +85,9 @@ module QSexp
       super
       on_parented do |p|
         unless p.get_scope.is_a?(ClassScope)  
-          puts "LINE: #{line}: ERROR - generics keyword outside of class declaration." 
-          exit(127) 
+          QSexp::compile_error line, "generics keyword outside of class declaration."  
         end
+        
         p.parent.parent.generics << self
         i = p.children.index(self)
         
