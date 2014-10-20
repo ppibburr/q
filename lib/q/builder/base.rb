@@ -165,7 +165,6 @@ module QSexp
       when :binary
         construct QSexp::Binary, e, *o
       when :call
-        p o[3]
         if o[3].event == :"@ident" and ["d","f", "l"].index(o[3].string)
           return construct(QSexp::Numeric, e, *o)
         elsif QSexp::Sugar::Call.match?(o[3])

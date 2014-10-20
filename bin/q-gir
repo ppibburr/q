@@ -1,0 +1,92 @@
+#!/usr/bin/env ruby
+
+def system c
+  puts c
+  super
+end
+
+Q  = File.expand_path(File.join(File.dirname(__FILE__), "q"))
+QC = File.expand_path(File.join(File.dirname(__FILE__), "qc"))
+mode = :build
+unless ARGV.length == 2
+  unless ARGV[0] == "clean" or ARGV[0] == "tidy" or ARGV[0] == "install"
+    puts "Must specify at least source_file and version."
+    exit 1
+  end
+  
+  if ARGV[0] == "clean"
+    mode = :clean
+  elsif ARGV[0] == "tidy"
+    mode = :tidy
+  elsif ARGV[0] == "install"
+    mode = :install
+  end
+end
+
+path = ARGV.shift
+file_name = File.basename(path).split(".q").first
+version = ARGV.shift
+namespace = file_name.split("_").map do |q| q.capitalize end.join()
+library   = "#{namespace}-#{version}"
+
+[gir_file  = "./build/share/gir-1.0/#{library}.gir",
+header_file = "./build/include/#{file_name}.h",
+c_file = "./build/src/#{file_name}.c",
+vapir_file = "./build/share/vala/vapi/#{library}.vapi",
+shared_lib = "./build/lib/lib#{namespace}.so",
+typelib    = "./build/lib/girepository-1.0/#{namespace}-#{version}.typelib"].each do |f|
+  system "mkdir -p #{File.dirname(f)}"
+end
+
+if mode == :clean
+  exit(1) unless system("rm -rf build/*")
+  exit(0)
+elsif mode == :tidy 
+  system "rm ./build/share/vala/vapi/*.vapi"
+  system "rm ./build/src/*.c"  
+  system "rm ./build/include/*.h"   
+  exit(0)
+elsif mode == :install
+  system "cp ./build/lib/*.so /usr/lib/"
+  system "cp ./build/lib/girepository-1.0/*.typelib /usr/lib/girepository-1.0/"  
+  exit(0)
+end
+
+puts "Generating library and GIR typelib ..."
+puts m = "
+  Namespace:           #{namespace}.
+  Version:             #{version}.
+  Source:              #{path}.
+  Generated Files Name #{file_name}.
+  Target:              ./build/#{namespace}
+"
+
+unless system("#{QC} #{path} --ccode --header=#{header_file} \
+   --gir=#{gir_file} \
+   --library=#{library} \
+   #{ARGV.join(" ")}")
+   
+  puts "Failed to generate #{gir_file}"
+  exit(1)
+end
+
+system "mv #{file_name}.c ./build/src/"
+system "mv #{namespace}-#{version}.vapi ./build/share/vala/vapi/"
+
+unless system("gcc -fPIC -shared -o #{shared_lib} \
+   $(pkg-config --libs --cflags gobject-2.0) \
+   #{c_file}") 
+
+  puts "Failed to create shared lib: #{shared_lib}"
+  exit(1)
+end
+
+unless system("g-ir-compiler --shared-library=#{shared_lib} \
+   --output=#{typelib} #{gir_file}")
+
+  puts "Failed to create gir typelib: #{typelib}"
+  exit(1)
+end
+
+puts "Completed."
+puts m
