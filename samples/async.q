@@ -1,8 +1,8 @@
 async
-def nap(interval:uint, priority: :int?)
+def nap(interval:uint, priority?:int)
   z = :GLib::SourceFunc
 
-  z = proc do
+  z = proc() do
     nap.callback();
     next(false);
   end

@@ -192,7 +192,10 @@ module QSexp
         end      
       
         return construct(QSexp::Defs, e, *o)  
-        
+      
+      when :unary
+        construct QSexp::Unary, e, *o
+      
       when :method_add_arg
         construct(QSexp::MethodAddArg, e, *o)
         
@@ -218,6 +221,9 @@ module QSexp
           return construct(GenericsTypeDeclaration, e, *o)
         end
         construct ARef, e, *o
+      when :aref_field
+       construct ARefField, e, *o
+        
       when :params
         construct(QSexp::Parameters, e, *o)   
       when :def
@@ -299,6 +305,7 @@ module QSexp
         return super
       end
     rescue => err
+      p err
       QSexp.compile_error o[0], "error on #{e} ..."
     end
     

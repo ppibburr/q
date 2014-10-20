@@ -3,7 +3,7 @@
 # Wrapper combining `q` and `valac`
 #
 
-
+puts ARGV[0]
 
 t=File.join(File.expand_path(File.dirname(__FILE__)), "q") + " #{ARGV[0]}"
 

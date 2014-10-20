@@ -42,12 +42,18 @@ module QSexp
         when :constant
           return assign_constant(ident, declare)  
             
+        when :aref_field
+          return assign_aref ident, declare   
         else
           
         end
       else
         return "#{(" ")*ident}#{args[0].build_str} = #{args[1].build_str}"
       end
+    end
+    
+    def assign_aref ident, declare
+      "#{(" ")*ident}#{args[0].build_str} = #{args[1].build_str}"
     end
     
     def check_do_new_local name, declare

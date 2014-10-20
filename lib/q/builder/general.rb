@@ -15,6 +15,12 @@ module QSexp
     end
   end
 
+  module Unary
+    def build_str ident = 0
+      super(ident).gsub(/\-\@/,'-')
+    end
+  end
+
   module For
     attr_reader :name, :low, :high, :type
   # for (type name = low; name <= high; name++) {
@@ -199,7 +205,7 @@ module QSexp
       end
       
     rescue => e
-      raise "LINE: #{line}, #{event}\n#{e}\n#{e.backtrace[0..3].join("\n")}"
+      QSexp::compile_error line, "unknown"
     end
   end
 
@@ -385,6 +391,12 @@ module QSexp
       args[0].build_str + "[" +
       args[1].build_str +
       "]"
+    end
+  end
+  
+  module ARefField
+    def build_str ident = 0
+      (" "*ident) + args.map do |a| a.build_str end.join("[")+"]"
     end
   end
 

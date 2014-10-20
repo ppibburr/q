@@ -3,7 +3,14 @@ module QSexp
     class Parameter
       attr_reader :type, :name
       def initialize name, type = nil
-        @name = name.build_str
+        @name = name.build_str.gsub(/\:$/,'')
+        
+        if @name =~ /\?$/
+          @name = @name.gsub(/\?$/,'')
+          
+          @may_be_null = true
+        end
+        
         if type
           @type = type.build_str
           if type.event == :aref 
@@ -13,7 +20,11 @@ module QSexp
       end
       
       def build_str ident=0
-        "#{" "*ident}#{type}#{type ? " " : ""}#{name.gsub(":","")}"
+        "#{" "*ident}#{type}#{allow_null? ? "?" : ""}#{type ? " " : ""}#{name.gsub(":","")}"
+      end
+      
+      def allow_null?
+        !!@may_be_null
       end
     end
     

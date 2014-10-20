@@ -78,7 +78,7 @@ module QSexp::TypeDeclarationRoot
   end
 
   def build_str ident = 0
-  
+    super
   end
 end
 

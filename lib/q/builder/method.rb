@@ -6,24 +6,30 @@ module QSexp
     def initialize *o
       super
       
+     
       unless is_a?(Defs)
         @symbol    = args[0].build_str.to_sym
         @body_stmt = args[2]
       
         @parameters = args[1]
-      
-        if args[2].args[0].children[0].event == :symbol_literal
-          set_explicit_return(args[2].args[0].children.shift)
-        end
       else
         @symbol    = args[2].build_str.to_sym
         @body_stmt = args[4]
       
         @parameters = args[3]
-          
-        if args[4].args[0].children[0].event == :symbol_literal
-          set_explicit_return(args[4].args[0].children.shift)
+      end
+    end
+    
+    def parented p
+      super
+      unless is_a?(Defs)
+        if args[2].args[0].children[0].is_a?(QSexp::TypeDeclarationRoot)
+          set_explicit_return(args[2].args[0].children.shift)    
         end
+      else
+        if args[4].args[0].children[0].is_a?(QSexp::TypeDeclarationRoot)
+          set_explicit_return(args[4].args[0].children.shift)
+        end      
       end
     end
     
