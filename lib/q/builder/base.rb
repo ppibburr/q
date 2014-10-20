@@ -4,13 +4,13 @@ module QSexp
      exit 1
    end
 
-	module Node
-	  attr_accessor :parent, :line
-	  def initialize l, p = nil
-		@parent = p
-	  	@line = l
-	  end
-	  
+    module Node
+      attr_accessor :parent, :line
+      def initialize l, p = nil
+        @parent = p
+        @line = l
+      end
+      
     def mark_no_semicolon(bool = true)
       @marked_no_sc = bool
     end
@@ -19,7 +19,7 @@ module QSexp
       @marked_no_sc
     end
     
-	  def get_scope
+      def get_scope
       p = self
   
       until p.respond_to? :scope
@@ -67,25 +67,25 @@ module QSexp
       buff << build_str(ident)
 
     end
-	end  
+    end  
 
-	module Event
-	  attr_accessor :event
-	  def initialize e, l, *o
-		  @event = e
-		  super l, *o
-	  end
-	end
-	  
-	  
-	class Statements
-	  include Node
-	  
-	  attr_reader :children, :event
-	  
-	  def push i      
-		  (@children ||= []) << i
-	  end
+    module Event
+      attr_accessor :event
+      def initialize e, l, *o
+          @event = e
+          super l, *o
+      end
+    end
+      
+      
+    class Statements
+      include Node
+      
+      attr_reader :children, :event
+      
+      def push i      
+          (@children ||= []) << i
+      end
     
     def build_str ident=0
       str = ""
@@ -98,22 +98,22 @@ module QSexp
       end if children
       str.gsub(/^;\n/,'')
     end
-	end
+    end
 
-	class Item
-	  include Node
-	  include Event
-	  attr_reader :args
-	  
-	  def initialize e, line ,*a
-		  super e,line
+    class Item
+      include Node
+      include Event
+      attr_reader :args
+      
+      def initialize e, line ,*a
+          super e,line
       
       a.each do |q| 
         q.parent = self if q.is_a?(Node)
       end
-		  
+          
       @args = a
-	  end
+      end
     
     def push q
       @args << q
@@ -165,11 +165,11 @@ module QSexp
       when :binary
         construct QSexp::Binary, e, *o
       when :call
-        
+        p o[3]
         if o[3].event == :"@ident" and ["d","f", "l"].index(o[3].string)
-          #if [:float, :int].index(o[1].resolved_type)
-            return construct(QSexp::Numeric, e, *o)
-          #end
+          return construct(QSexp::Numeric, e, *o)
+        elsif QSexp::Sugar::Call.match?(o[3])
+          return construct(QSexp::Sugar::Call, e, *o)
         end
         
         if New.match?(*o)
@@ -180,9 +180,6 @@ module QSexp
 
         
       when :sclass
-        if o[1].event == :method_add_block
-          exit
-        end
       
         return construct(QSexp::ClassConstruct, e, *o)    
         
@@ -302,7 +299,7 @@ module QSexp
       else
         return super
       end
-    rescue
+    rescue => err
       QSexp.compile_error o[0], "error on #{e} ..."
     end
     
@@ -316,30 +313,30 @@ module QSexp
       ins.send :initialize, e,*o
       return ins
     end
-	end
+    end
 
-	class Single
-	  include Node
-	  include Event
-	  attr_reader :string
-	  def initialize e, l, t
-		  super(e, l)
-		 
-		  @string = t == "nil" ? "null" : t
-	  end
-	  
-	  def resolved_type
-	    case event
-	    when :"@int"
-	      :int
-	    when :"@float"
-	      :double
-	    when :"string_literal"
-	      :string
-	    end
-	  end
-	  
-	  def type
+    class Single
+      include Node
+      include Event
+      attr_reader :string
+      def initialize e, l, t
+          super(e, l)
+         
+          @string = t == "nil" ? "null" : t
+      end
+      
+      def resolved_type
+        case event
+        when :"@int"
+          :int
+        when :"@float"
+          :double
+        when :"string_literal"
+          :string
+        end
+      end
+      
+      def type
       case event
       when :"@gvar"
         :class
@@ -354,10 +351,11 @@ module QSexp
       when :"@kw"
         :keyword
       end
-	  end    
+      end    
     
     def build_str ident=0
       "#{" "*ident}#{string}"
     end
-	end
+    end
+    
 end

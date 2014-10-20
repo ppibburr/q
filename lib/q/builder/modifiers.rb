@@ -11,7 +11,8 @@ module QSexp
       :public,
       :protected,
       :signal,
-      :async
+      :async,
+      :extern
     ]
     
     include VCall

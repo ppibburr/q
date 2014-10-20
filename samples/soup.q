@@ -1,5 +1,5 @@
 def main(args:string[])
-  url = args[1] != nil ? args[1] : "http://google.com"
+  url     = args[1] != nil ? args[1] : "http://google.com"
   session = Soup::Session.new()
   msg     = Soup::Message.new("GET", url)
   

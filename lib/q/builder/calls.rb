@@ -22,6 +22,30 @@ module QSexp
     end
   end
 
+  module Sugar
+    module self::Call
+      module Alias
+        ALIASES = {
+          "to_s" => "to_string"
+        }
+        
+        def string
+          ALIASES[@string] || @string
+        end
+      end
+    
+      def self.match? q
+        n = q.event == :"@ident" and Alias::ALIASES[q.string]
+      end
+    
+      include ::QSexp::Call
+      def initialize *o
+        o[4].extend Alias
+        super
+      end
+    end
+  end
+
   module FCall
     def build_str ident=0
       super

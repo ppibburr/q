@@ -32,13 +32,22 @@ module QSexp
     end
     
     def build_str(ident=0)
-      "\n#{" "*ident}#{get_access()} #{declare_scope()} #{declare_kind()}#{declare_special} #{return_type || "void"} #{symbol}("+parameters.build_str+")"+
+      "\n#{" "*ident}#{get_extern()}#{get_access()} #{declare_scope()} #{declare_kind()}#{declare_special} #{return_type || "void"} #{symbol}("+parameters.build_str+")"+
       ((delegate? or signal?) ? ";" : " {\n#{super(ident)+"\n#{" "*ident}}"}")
     end
     
     def delegate?
       @modifier and @modifier[:delegate]
     end
+    
+    def get_extern
+      return "extern " if extern?
+      return ""
+    end
+    
+    def extern?
+      @modifier and @modifier[:extern]
+    end     
     
     def signal?
       @modifier and @modifier[:signal]
