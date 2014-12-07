@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+require 'q'
+require "q/builder/compilers/vala.rb"
+
+ARGV.each do |f|
+  base = File.basename(f)
+  dir  = File.dirname(f)
+  code = open(f).read
+
+  ast = Q.build(code)
+  File.open(File.join(dir,"#{base.gsub(/\.q$/,".vala")}"), "w") do |f| f.puts Q::ValaSourceGenerator.new(ast).compile end
+end
