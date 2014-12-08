@@ -112,6 +112,7 @@ module Q
       end
       
       def build_str ident = 0
+        mark_semicolon false
         get_indent(ident) + subast[0].value.gsub(/^"/,'').gsub(/"$/,'')
       end 
     end
@@ -277,7 +278,44 @@ module Q
       end
     end
    
- 
+    class Signal < Base
+      include DefaultMemberDeclaration
+    
+      handles Q::Ast::Command, Command do
+        subast[0].is_a?(Q::Ast::Variable) and subast[0].symbol.to_sym == :signal
+      end
+      
+      def initialize *o
+        super
+        
+        mark_prepend_newline true
+      end
+      
+      def symbol
+        subast[1].subast[0].subast[0].subast[0].symbol
+      end
+      
+      def params
+        subast[1].subast[0].subast[0].subast[1].subast[0].subast[0]
+      rescue
+        nil
+      end
+      
+      def return_type
+        if @rt
+          return @rt
+        end
+        q = compiler.handle(subast[1].subast[0].subast[1].node.body.subast[0])
+        @rt = q.is_a?(VoidStmt) ? :void : q.get_type
+      rescue
+        :void
+      end
+      
+      def build_str ident = 0
+        get_indent(ident) + "#{target} #{visibility} signal #{return_type ? return_type : :void} #{symbol}(#{params.build_str.gsub(":",'')})"
+    
+      end
+    end 
     
     class Property < Base
       include DefaultMemberDeclaration
@@ -618,7 +656,7 @@ module Q
         if type.infered?
           "var #{variable.symbol} = #{value.build_str(ident).strip}"
         else
-          q = type.build_str + 
+          q = "#{type.build_str}" + 
           if type.array and type.array.length
             "; #{variable.symbol} = new #{type.type}[#{type.array.length}]"
           elsif type.nullable?
@@ -761,6 +799,38 @@ module Q
       def build_str ident = 0
         value
       end
+      
+      def out?
+        @out
+      end
+      
+      def ref?
+        @ref
+      end
+      
+      def owned?
+        @owned
+      end
+      
+      def unowned?
+        @unowned
+      end
+      
+      def set_ref bool = true
+        @ref = bool
+      end
+      
+      def set_out bool = true
+        @out = bool
+      end     
+      
+      def set_owned bool = true
+        @owned = bool
+      end 
+     
+      def set_unowned bool = true
+        @unowned = bool
+      end              
     end
     
     class OP < Base
@@ -897,6 +967,8 @@ module Q
       end
     end
     
+    
+    
     class Modifier < Base
       handles Q::Ast::VCall, VCall do
         HasModifiers::MODIFIERS.index(subast[0].symbol.to_sym)
@@ -952,16 +1024,6 @@ module Q
         end
       end
     end 
-    
-    class Cast < Base
-      handles Q::Ast::Paren do
-        subast[0].is_a?(Q::Ast::Command) and subast[0].subast[1].is_a?(Q::Ast::ArgsAddBlock)  and subast[0].subast[1].subast[0].is_a?(Q::Ast::Unary) and subast[0].subast[1].subast[0].kind == :"~" and (subast[0].subast[1].subast[0].what.is_a?(Q::Ast::ARef) or subast[0].subast[1].subast[0].what.is_a?(Q::Ast::SymbolLiteral))
-      end
-      
-      def build_str ident = 0
-        get_indent(ident) + "(#{subast[0].subast[1].subast[0].what.build_str})#{subast[0].subast[0].symbol}"
-      end
-    end
     
     class FloatingPoint < Base
       include Q::Compiler::KnownType
@@ -1151,6 +1213,76 @@ module Q
       
       def build_str(ident = 0)
         "#{get_indent(ident)}#{left.build_str} #{operand} #{right.build_str}"
+      end
+    end
+    
+    class Cast < Base
+      handles Q::Ast::Binary, Binary do
+        left.is_a?(Q::Ast::SymbolLiteral) and operand.to_sym == :"<<"
+      end
+      
+      attr_reader :to, :what
+      def initialize *o
+        super
+        @to = compiler.handle(node.left)
+        @what = compiler.handle(node.right)
+      end
+      
+      def build_str ident = 0
+        case to.build_str.strip
+        when "out"
+          "#{to.build_str} #{what.build_str}"
+        when "ref"
+          "#{to.build_str} #{what.build_str}"
+        else
+          "(#{to.build_str})#{what.build_str}"
+        end
+      end
+    end    
+    
+    class If < Base
+      include HasBody
+      handles Q::Ast::If
+      attr_reader :type, :exp, :else
+      def initialize *o
+        super
+        @type = :if
+        @exp = compiler.handle(node.exp)
+        @exp.parented self
+        @else = compiler.handle(node.else) if node.else
+        @else.parented self if @else
+      end
+      
+      def build_str ident = 0
+        if self.class == Q::ValaSourceGenerator::If
+          mark_prepend_newline true
+        end
+        
+        (t=get_indent(ident)) +
+        "#{type.to_s.gsub("elsif", "else if")} (#{exp.build_str}) {\n"+
+        write_body(ident)+
+        "\n#{t}}" +
+        (self.else ? "\n"+self.else.build_str(ident) : "")
+      end      
+    end
+    
+    class ElsIf < If
+      handles Q::Ast::ElsIf
+      def initialize *o
+        super
+        @type = :elsif
+      end
+    end
+    
+    class Else < Base
+      include HasBody
+      handles Q::Ast::Else
+      
+      def build_str ident = 0
+        (t=get_indent(ident)) +
+        "else {"+
+        write_body(ident)+
+        "\n#{t}}"
       end
     end
     
@@ -1350,11 +1482,42 @@ module Q
       end
     end    
 
+    class TypeType < Base
+      handles Q::Ast::Call, Call do;
+        target.is_a?(Q::Ast::SymbolLiteral) and (call.symbol.to_s =~ /^ref$/ or call.symbol.to_s =~ /^out$/ or call.symbol.to_s =~ /^(unowned|owned)/)
+      end
+      
+      attr_reader :target, :call
+      def initialize *o
+        super
+      
+        @target = compiler.handle(node.target)
+        @call   = compiler.handle(node.call)
+        
+        case node.call.symbol.to_sym
+        when :ref
+          target.set_ref true
+        when :out 
+          target.set_out true
+        when :owned
+          target.set_owned true
+        when :unowned
+          target.set_unowned true
+        end
+      end
+      
+      def parented par
+        i = par.subast.index(self)
+        par.subast[i] = target
+        target.parented par
+      end
+    end
+
     class TypedEach < Base
       handles Q::Ast::MethodAddBlock, MethodAddBlock do
         next nil unless subast[0].is_a?(Q::Ast::MethodAddArg)
         next nil unless subast[0].subast[0].is_a?(Q::Ast::Call)        
-        (subast[0].subast[0].target.is_a?(Q::Ast::SymbolLiteral) or subast[0].subast[0].target.is_a?(Q::Ast::ARef)) and subast[0].subast[0].call.symbol.to_s =~ /^in/
+        (subast[0].subast[0].target.is_a?(Q::Ast::SymbolLiteral) or subast[0].subast[0].target.is_a?(Q::Ast::ARef)) and subast[0].subast[0].call.symbol.to_s =~ /^in$/
       end
       
       attr_accessor :type, :var_name, :array
@@ -1419,6 +1582,11 @@ module Q
       attr_accessor :array, :type
       def initialize t, a=false
         @array = a
+        
+        if t.is_a?(TypeType)
+          t = t.target
+        end
+        
         if t
           t = t.to_sym if t.is_a?(::String)
           
@@ -1429,6 +1597,11 @@ module Q
             end
             
             @type = t.get_type
+            
+            @out = t.out?
+            @ref = t.ref?
+            @owned = t.owned?
+            @unowned = t.unowned?
           elsif t.is_a?(VarRef)
             if t.variable.is_a?(KeyWord)
               @type = case t.variable.symbol
@@ -1456,6 +1629,22 @@ module Q
         type == :infered
       end
       
+      def out?
+        @out
+      end
+      
+      def ref?
+        @ref
+      end
+      
+      def owned?
+        @owned
+      end
+      
+      def unowned?
+        @unowned
+      end
+      
       def nullable?
         if type.is_a?(::String)
           type = @type.to_sym
@@ -1478,7 +1667,7 @@ module Q
       end
       
       def build_str ident = 0
-        (" "*ident) + "#{type}#{array ? "[]" : ""} #{name}"
+        (" "*ident) + "#{out? ? "out " : "#{ref? ? "ref " : "#{ owned? ? "owned " : "#{unowned? ? "unowned " : ""}"}"}"}#{type}#{array ? "[]" : ""} #{name}"
       end
     end
     
@@ -1492,7 +1681,9 @@ module Q
       def initialize *o
         super
         @typed = node.keywords.map do |n,t| 
-          Parameter.new(compiler.handle(n).name, compiler.handle(t))
+          tt = compiler.handle(t)
+
+          Parameter.new(compiler.handle(n).name, tt)
         end
         
         @untyped = node.ordered.map do |n,t| 

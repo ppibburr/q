@@ -529,6 +529,35 @@ module Q
       register do :super end
     end  
     
+    class If < Event
+      include HasArguments
+      register do :if end
+      attr_reader :exp, :type, :else
+      def initialize *o
+        super
+        @type = :if
+        @exp = subast.shift
+        @else = subast.pop
+        def self.subast
+          super[0].children
+        end
+      end
+    end
+    
+    class ElsIf < If
+      register do :elsif end
+      def type; :elsif; end
+    end
+    
+    class Else < Event
+      include HasArguments
+     
+      register do :else end
+      def subast
+        super[0].children
+      end
+    end
+    
     class Binary < Event
       include HasArguments
       register do :binary end
