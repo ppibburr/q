@@ -50,16 +50,11 @@ module Q
       register do
         :"@comment"
       end
-      
-      def initialize l, *o
-        @value = o[0]
+      attr_reader :value
+      def initialize e,l, *o
+        @value = o[0].strip.gsub(/^\#/,'')
         super l
-      end
-      
-      def parented parent = nil
-        res = super
-        parent.mark_has_comment true
-        return res
+        Q::COMMENTS[l] = self
       end
     end
 
@@ -803,6 +798,7 @@ module Q
     def self.handle_single event, line, *foo
       find_for(event, *foo).new(event, line, *foo)
     rescue
+
     end 
     
     def Q.parse_error event, line

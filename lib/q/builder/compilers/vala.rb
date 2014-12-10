@@ -90,13 +90,43 @@ module Q
       attr_reader :body
       
       def write_body ident = 0
-        subast.map do |c| 
+        @current = -1
+        subast.map do |c|
+          @current += 1
+          s = ""
+          hc = nil 
+          if (next_child and next_child.node.line != c.node.line) and comment_at(c.node.line)
+            s = ""
+            if c.marked_extra_newline?
+              s = "\n"
+              c.mark_extra_newline false
+            end
+            if c.marked_newline?
+              s += "\n"
+              c.mark_newline false
+            end
+            hc = true
+          end
           (c.marked_prepend_newline? ? "\n" : "") +
           c.build_str(ident+2) +
           (c.marked_semicolon? ? ";" : "") +
           (c.marked_newline? ? "\n" : "") +
-          (c.marked_extra_newline? ? "\n" : "")          
+          (c.marked_extra_newline? ? "\n" : "") +
+          (hc ? write_comment(c.node.line,0).gsub(/\n$/,'') + s : "") +
+          ((next_child and next_child.node.line != c.node.line) ? "#{(comment_at(c.node.line+1) and next_child.node.line != c.node.line+1) ? write_comment(c.node.line+1, ident) : ""}" : "")          
         end.join
+      end
+      
+      def next_child
+        subast[@current+1]
+      end
+      
+      def comment_at l
+        Q::COMMENTS[l]
+      end
+      
+      def write_comment l, ident
+        get_indent(ident+2)+"// "+comment_at(l).value.strip+"\n"
       end
     end
     

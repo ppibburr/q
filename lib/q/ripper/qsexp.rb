@@ -17,8 +17,11 @@ module Q
     @filename
   end
 
+  COMMENTS = []
+
   def self.build(src, filename = '-', lineno = 1)
     Q.src = src
+    COMMENTS.clear
     @filename = filename
     QSexpBuilder.new(src, filename, lineno).parse
   end
