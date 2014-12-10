@@ -3,7 +3,7 @@ Q
 
 Install
 ===
-`rake gem`
+`rake gem`  
 `sudo gem i pkg/*.gem`
 
 USAGE
@@ -18,7 +18,7 @@ This will generate `./source`
 
 * multiple sources
 ```ruby
-require "some/other.q"
+require "/some/other.q"
 ```
 
 Sample
