@@ -197,7 +197,13 @@ module Q
       include HasArguments
       register do :command end
       def initialize *o
-      super
+        super
+        if subast[0].symbol.to_sym == :require
+          def self.parented par
+            par.requires << Q::Require.new(self)
+            par.subast.delete self
+          end
+        end
       end
     end
 
@@ -398,13 +404,20 @@ module Q
         :program
       end
       
+      attr_reader :requires
       def initialize *o
         super
         @statements = arguments.shift
+        @requires = []
       end
       
       def subast
         @statements.children
+      end
+      
+      def parented *o
+        super
+        subast.each do |c| c.parented self end
       end
     end
 
@@ -555,6 +568,21 @@ module Q
       register do :else end
       def subast
         super[0].children
+      end
+    end
+
+    class While < Event
+      include HasArguments
+      register do :while end
+      attr_reader :exp
+      def initialize *o
+        super
+
+        @exp = subast.shift
+
+        def self.subast
+          super[0].children
+        end
       end
     end
     

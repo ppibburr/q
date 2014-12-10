@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+if File.exist?(File.join(File.dirname(__FILE__),"q2vala"))
+  cmd = "ruby #{File.dirname(__FILE__)}/q2vala"
+else
+  cmd = "q2vala"
+end
+
+system "#{cmd} #{ARGV.shift} --compile #{ARGV.join(" ")}"

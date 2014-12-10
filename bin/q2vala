@@ -2,11 +2,38 @@
 require 'q'
 require "q/builder/compilers/vala.rb"
 
-ARGV.each do |f|
+requires = []
+
+f = ARGV.shift
+c = ARGV.shift
+
+def vala_file f
   base = File.basename(f)
   dir  = File.dirname(f)
-  code = open(f).read
+  File.join(dir,"#{base.gsub(/\.q$/,".vala")}")
+end
 
-  ast = Q.build(code)
-  File.open(File.join(dir,"#{base.gsub(/\.q$/,".vala")}"), "w") do |f| f.puts Q::ValaSourceGenerator.new(ast).compile end
+def perform f, reqs=[]
+  reqs << f unless reqs.index f
+
+  code = open(f).read
+  ast = Q.build(code, f)
+  ast.parented nil
+  
+  ast.requires.each do |req|
+    if req.ok?
+	  perform req.path, reqs	
+    else
+  	  puts "RequireError: #{req.source} - #{req.line}, no such file: #{req.path}"
+  	  exit 1
+	end
+  end  
+  
+  File.open(vala_file(f), "w") do |f| f.puts Q::ValaSourceGenerator.new(ast).compile end
+end
+
+perform f, reqs = []
+p reqs
+if c == "--compile"
+  system "valac #{reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{ARGV.join(" ")}".strip
 end

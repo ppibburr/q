@@ -12,9 +12,14 @@ module Q
   def self.src
     @src
   end
+  
+  def self.filename
+    @filename
+  end
 
   def self.build(src, filename = '-', lineno = 1)
     Q.src = src
+    @filename = filename
     QSexpBuilder.new(src, filename, lineno).parse
   end
 

@@ -11,6 +11,19 @@ end
 require "compiler"
 require "ast"
 
+class Q::Require
+  attr_reader :path, :line, :source
+  def initialize ast
+    @path = File.expand_path(Q.src.split("\n")[ast.line-1].strip.gsub(/^require /,'').gsub(/'|"/,'').strip)
+    @line = ast.line
+    @source = Q.filename
+  end
+  
+  def ok?
+    File.exist?(path)
+  end
+end
+
 class NilClass
   def build_str ident = 0
     ""

@@ -2,7 +2,6 @@ $: << File.dirname(__FILE__)
 require "source_generator"
 
 module Q
-
   class ValaSourceGenerator < Q::SourceGenerator
     def handle *o
       res = super
@@ -225,6 +224,15 @@ module Q
           "#{t}#{s} #{subast[1].build_str}"
         end
       end
+    end
+    
+    class Using < Base
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :include
+      end
+      def build_str ident = 0
+        get_indent(ident)+"using #{subast[1].build_str}"
+      end  
     end
     
     class GenericTypesDeclaration < Base
@@ -486,10 +494,6 @@ module Q
       end
     end
     
-    class Range < Base
-    
-    end
-    
     class Q::Range < Base
       handles Q::Ast::Dot2
       attr_accessor :first, :last
@@ -497,6 +501,10 @@ module Q
         super
         @first = compiler.handle(node.first).build_str
         @last  = compiler.handle(node.last).build_str
+      end
+      
+      def build_str ident = 0
+        get_indent(ident)+"#{first}:#{last}"
       end
     end
     
@@ -1280,7 +1288,27 @@ module Q
       
       def build_str ident = 0
         (t=get_indent(ident)) +
-        "else {"+
+        "else {\n"+
+        write_body(ident)+
+        "\n#{t}}"
+      end
+    end
+
+    class While < Base
+      include HasBody
+      handles Q::Ast::While
+   
+      attr_reader :exp   
+      def initialize *o
+        super
+   
+        @exp = compiler.handle(node.exp)
+        @exp.parented self      
+      end
+      
+      def build_str ident = 0
+        (t=get_indent(ident)) +
+        "while (#{exp.build_str}) {\n"+
         write_body(ident)+
         "\n#{t}}"
       end
@@ -1598,10 +1626,12 @@ module Q
             
             @type = t.get_type
             
-            @out = t.out?
-            @ref = t.ref?
-            @owned = t.owned?
-            @unowned = t.unowned?
+            if t.is_a?(Type)
+              @out = t.out?
+              @ref = t.ref?
+              @owned = t.owned?
+              @unowned = t.unowned?
+            end
           elsif t.is_a?(VarRef)
             if t.variable.is_a?(KeyWord)
               @type = case t.variable.symbol
