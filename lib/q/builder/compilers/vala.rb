@@ -233,6 +233,21 @@ module Q
       end
     end
     
+    class ObjMember < Base
+      handles Q::Ast::Field
+      def build_str ident = 0
+        "#{subast[0].build_str}.#{subast[1].symbol}"
+      end
+      
+      def symbol
+        build_str
+      end
+      
+      def kind
+        :field
+      end
+    end
+    
     class Using < Base
       handles Q::Ast::Command, Command do
         subast[0].symbol.to_sym == :include
@@ -687,6 +702,10 @@ module Q
       end
 
       def variable
+        if subast[0].is_a?(ObjMember)
+          return subast[0]
+        end
+        
         subast[0].variable
       end
       
@@ -703,22 +722,22 @@ module Q
       end
       
       def build_str ident = 0
-          case variable.kind
-          when :instance
-           "#{get_indent(ident)}this."+variable.symbol + do_sets_field + " = #{value.build_str}"
-          when :class
-           "#{get_indent(ident)}"+variable.symbol + do_sets_field + " = #{value.build_str}"
-          when :global
-           "#{get_indent(ident)}"+variable.symbol + do_sets_field + " = #{value.build_str}"
-          when :local
-            if is_declaration?
-              get_indent(ident) + declare_field
-            else
-              get_indent(ident) + assign_local(ident)
-            end
-          else
-            raise "cant assign #{variable.kind}: #{variable.symbol}"
-          end
+        if variable.respond_to?(:kind)
+		  case variable.kind
+		  when :instance
+		   "#{get_indent(ident)}this."+variable.symbol + do_sets_field + " = #{value.build_str}"
+		  when :local
+			if is_declaration?
+			  get_indent(ident) + declare_field
+			else
+			  get_indent(ident) + assign_local(ident)
+			end
+		  else
+			"#{get_indent(ident)}"+variable.symbol + do_sets_field + " = #{value.build_str}"          
+		  end
+        else
+          raise "cant assign #{variable.kind}: #{variable.symbol}"
+        end
       end
     end
 

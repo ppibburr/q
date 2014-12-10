@@ -207,6 +207,15 @@ module Q
       end
     end
 
+    class Field < Event
+      include HasArguments
+      register do :field end
+      def initialize *o
+        super
+        subast.delete_at(1)
+      end
+    end
+
     class Unary < Event
       include HasArguments
       attr_reader :kind, :what
