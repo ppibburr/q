@@ -32,6 +32,16 @@ module Q
       def get_indent ident
         " " * ident
       end
+      
+      def parented par
+        @parent = par
+        @scope = par.get_childrens_scope
+        subast.each do |c| c.parented self end 
+      end
+      
+      def get_match_data_variable
+        "_q_local_scope_match_data"
+      end
     end
   
     module HasModifiers
@@ -90,7 +100,10 @@ module Q
       attr_reader :body
       
       def write_body ident = 0
+        
         @current = -1
+        p scope.member.class
+        ([Q::ValaSourceGenerator::Def, Q::ValaSourceGenerator::Singleton].index(self.class) ? "#{get_indent(ident+2)}MatchInfo _q_local_scope_match_data;\n" : "") +
         subast.map do |c|
           @current += 1
           s = ""
@@ -178,6 +191,10 @@ module Q
       end
       
       def build_str ident = 0
+        if kind == :global and symbol.to_s == "~"
+          return get_indent(ident) + "#{get_match_data_variable}.fetch_all()"
+        end
+        
         get_indent(ident) + "#{kind == :instance ? "this." : ""}#{symbol.to_s}"
       end
     end
@@ -188,7 +205,12 @@ module Q
       def initialize *o
         super
         @what = compiler.handle(node.what)
-        @members = node.members.map do |n| compiler.handle(n) end
+        @what.parented self
+        @members = node.members.map do |n| 
+          c = compiler.handle(n)
+          c.parented self
+          c
+        end
       end
       def variable
         @what
@@ -210,6 +232,23 @@ module Q
       
       def build_str ident = 0
         body.map do |s| s.build_str(ident+2) end.join(", ")
+      end
+    end
+    
+    class Regexp < Base
+      handles Q::Ast::Regexp
+      include Q::Compiler::KnownType
+      def initialize *o
+        super
+      end
+      
+      def get_type
+        :Regex
+      end
+      
+      
+      def build_str ident = 0
+        "/#{node.value}/#{node.modifier ? node.modifier : ""}"
       end
     end
     
@@ -417,7 +456,7 @@ module Q
       end
       
       def build_str ident = 0
-        "#{kind} #{what.build_str}"
+        "#{kind.to_s.gsub(/\@$/,'')}#{what.build_str}"
       end 
     end    
     
@@ -675,8 +714,13 @@ module Q
     class ArgsAddBlock < Base
       handles Q::Ast::ArgsAddBlock
       
+      def initialize *o
+        super
+
+      end
+      
       def build_str ident = 0
-        subast.map do |c| c.build_str end.join(", ")
+        subast.map do |c| c.parented self;c.build_str end.join(", ")
       end
     end
     
@@ -844,6 +888,8 @@ module Q
         if of.is_a?(DeclaredType)
         "#{of.get_type}[]"
         else
+          of.parented self
+          values.parented self
           of.build_str+
           "[#{values.build_str}]"
         end
@@ -1064,6 +1110,18 @@ module Q
       def symbol
         node.symbol
       end
+      
+      def build_str ident = 0
+        raise "only backrefs should be here" unless node.kind == :backref or node.kind == :global
+        
+        if symbol.to_s =~ /^[0-9]+/
+          get_match_data_variable+".fetch("+symbol.to_s.gsub(/^$/, '')+")"
+        elsif symbol.to_s == "~"
+          get_match_data_variable+".fetch_all()"
+        else
+          raise "Bad value!"
+        end
+      end
     end  
     
     class VarField < Base
@@ -1279,7 +1337,30 @@ module Q
         @left, @operand, @right = [compiler.handle(node.left), node.operand, compiler.handle(node.right)]
       end
       
+      def parented par
+        super par
+
+      end
+      
+      def is_regmatch?
+        right.is_a?(Regexp) and ["!~","=~"].index(operand.to_s)
+      end
+      
+      def regmatch_type
+        return nil unless is_regmatch?
+        case operand.to_s
+        when "!~"
+          :false
+        else
+          :true
+        end
+      end
+      
       def build_str(ident = 0)
+        if is_regmatch?
+          return "#{get_indent(ident)}(#{right.build_str}).match(#{left.build_str}, 0, out #{get_match_data_variable})"
+        end
+        
         "#{get_indent(ident)}#{left.build_str} #{operand} #{right.build_str}"
       end
     end
@@ -1528,6 +1609,11 @@ module Q
     class MethodAddArg < Base
       handles Q::Ast::MethodAddArg
       
+      def parented par
+        super par
+        subast.each do |c| c.parented self end
+      end
+      
       def build_str ident = 0
         get_indent(ident) + subast[0].build_str +
         "(" +
@@ -1595,6 +1681,7 @@ module Q
       end
       
       def parented par
+        super
         i = par.subast.index(self)
         par.subast[i] = target
         target.parented par

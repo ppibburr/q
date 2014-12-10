@@ -201,6 +201,32 @@ module Q
         end
       end
     end
+    
+    class RegexpEnd < Event
+      include HasArguments
+      register do :"@regexp_end" end
+      attr_reader :value
+      
+      def initialize *o
+        @value = o[2].gsub(/^\//,'') if o[2]
+        super
+      end
+    end
+
+    class Regexp < Event
+      include HasArguments
+      register do :regexp_literal end
+      attr_reader :value, :modifier
+      def initialize *o
+        super
+       
+        @value = subast.shift.children[0].value
+        @modifier = subast.shift.value
+        def self.subast
+          []
+        end
+      end
+    end
 
     class Field < Event
       include HasArguments
@@ -225,7 +251,7 @@ module Q
     class Variable < Event
       include HasArguments
       register do |q|
-        [:'@ident', :'@const', :'@gvar', :'@cvar', :'@ivar'].index(q)
+        [:'@ident', :'@const', :'@gvar', :'@cvar', :'@ivar', :'@backref'].index(q)
       end
       
       attr_accessor :name
@@ -251,6 +277,8 @@ module Q
           :class
         when :"@ivar"
           :instance
+        when :"@backref"
+          :backref
         end
       end
     end

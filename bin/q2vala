@@ -36,5 +36,20 @@ end
 perform f, reqs = []
 
 if c == "--compile"
-  system "valac #{reqs.uniq.map do |f| p f;vala_file(f) end.join(" ")} #{ARGV.join(" ")}".strip
+  system "valac #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{ARGV.join(" ")}".strip
+  system "rm #{vs}"
 end
+__END__
+#if DO
+public class Q_MatchData : Object {
+  public MatchInfo match_info; 
+  
+  public bool match (Regex reg, string str) {
+    return reg.match(str, 0, out match_info);
+  }
+  
+  public string? fetch (int nth) {
+    return match_info.fetch(nth);
+  }	 
+} 
+#endif

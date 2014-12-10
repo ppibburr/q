@@ -20,6 +20,25 @@ module Q
       def append_lvar name, type
         @locals[name] = type
       end
+
+      def get_next_local
+        @n ||= 0
+        @n += 1
+        "_q_local_#{@n}"
+      end
+      
+      def until_nil &b
+        r = b.call(self)
+ 
+        return self if r
+        q = member
+        while q and q.scope
+          if r=b.call(q.scope)
+            return q.scope
+          end
+          q = q.scope.member.parent
+        end
+      end
       
       def declared?(name)
         if @locals[name]
@@ -43,7 +62,9 @@ module Q
       end
     end
 
-    class StructScope < Scope
+    class StopLScope < Scope;end;
+
+    class StructScope < StopLScope
       def declared?(name)
         true
       end
@@ -53,15 +74,15 @@ module Q
 
     end
 
-    class ClassScope < Scope
+    class ClassScope < StopLScope
 
     end
 
-    class MethodScope
+    class MethodScope < StopLScope
 
     end
 
-    class BlockScope
+    class BlockScope < Scope
 
     end 
  
