@@ -14,18 +14,14 @@ require "ast"
 class Q::Require
   attr_reader :path, :line, :source
   def initialize ast
-    @path = Q.src.split("\n")[ast.line-1].strip.gsub(/^require /,'').gsub(/'|"/,'').strip
     @line = ast.line
     @source = Q.filename
+    @path = File.expand_path(File.join(File.dirname(source), Q.src.split("\n")[ast.line-1].strip.gsub(/^require /,'').gsub(/'|"/,'').strip))  
   end
   
-  def ok? rel_dir = nil
-    path = self.path
-    if rel_dir
-      path = File.join(rel_dir, path)
-    end
-    if File.exist?(pth=File.expand_path(path))
-      return path
+  def ok?
+    if File.exist?(path)
+      return true
     end
   end
 end

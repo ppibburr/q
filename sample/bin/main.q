@@ -1,4 +1,5 @@
 require "../lib/foo.q"
+# Paths are relative to the file
 require "../lib/quux.q"
 
 def regex_example()

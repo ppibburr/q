@@ -18,10 +18,10 @@ module Q
   end
 
   COMMENTS = []
+  COMMENTS_FOR = {}
 
   def self.build(src, filename = '-', lineno = 1)
     Q.src = src
-    COMMENTS.clear
     @filename = filename
     QSexpBuilder.new(src, filename, lineno).parse
   end

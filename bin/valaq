@@ -82,7 +82,7 @@ def vala_file f
   dir  = File.dirname(f)
   File.join(dir,"#{base.gsub(/\.q$/,".vala")}")
 end
-
+COMMENTS = {}
 def perform f, reqs=[]
   reqs << f unless reqs.index f
 
@@ -90,16 +90,19 @@ def perform f, reqs=[]
   ast = Q.build(code, f)
 
   ast.parented nil
-  
+  COMMENTS[f] = Q::COMMENTS.dup;
+  Q::COMMENTS.clear
   ast.requires.each do |req|
-    if rp=req.ok?(REL_DIR)
-	  perform rp, reqs	
+    if req.ok?
+	  perform req.path, reqs	
     else
   	  puts "RequireError: #{req.source} - #{req.line}, no such file: #{req.path}"
   	  exit 1
 	end
   end  
-  
+
+  Q::COMMENTS.clear
+  Q::COMMENTS.push *COMMENTS[f]
   File.open(vala_file(f), "w") do |f| f.puts Q::ValaSourceGenerator.new(ast).compile end
 end
 

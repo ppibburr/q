@@ -102,7 +102,7 @@ module Q
       def write_body ident = 0
         
         @current = -1
-        p scope.member.class
+        
         ([Q::ValaSourceGenerator::Def, Q::ValaSourceGenerator::Singleton].index(self.class) ? "#{get_indent(ident+2)}MatchInfo _q_local_scope_match_data;\n" : "") +
         subast.map do |c|
           @current += 1
@@ -126,7 +126,7 @@ module Q
           (c.marked_newline? ? "\n" : "") +
           (c.marked_extra_newline? ? "\n" : "") +
           (hc ? write_comment(c.node.line,0).gsub(/\n$/,'') + s : "") +
-          ((next_child and next_child.node.line != c.node.line) ? "#{(comment_at(c.node.line+1) and next_child.node.line != c.node.line+1) ? write_comment(c.node.line+1, ident) : ""}" : "")          
+          write_comments(ident+2)
         end.join
       end
       
@@ -138,8 +138,34 @@ module Q
         Q::COMMENTS[l]
       end
       
+      def write_comments ident = 0
+        if next_child
+          get_comments(subast[@current].node.line+1, next_child.node.line-1).map do |l|
+            write_comment(l, ident)
+          end.join("\n")
+        else
+          ""
+        end
+      end
+      
       def write_comment l, ident
-        get_indent(ident+2)+"// "+comment_at(l).value.strip+"\n"
+        if next_child 
+          if l >= next_child.subast[0].node.line
+            ""
+          else
+            get_indent(ident)+"// "+comment_at(l).value.strip+"\n"
+          end
+        end
+      end
+      
+      def get_comments(s,e)
+       
+        a = []
+        for i in s..e
+          a << i if Q::COMMENTS[i]
+        end
+        p a,:COMMENTS________________________
+        return a
       end
     end
     
