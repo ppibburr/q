@@ -10,7 +10,7 @@ USAGE
 ===
 * Translation.  
 This will generate `/some/source.vala`  
-`q2vala /some/source.q`
+`valaq /some/source.q --no-compile`
 
 * Translate and compile
 This will generate `./source`  
