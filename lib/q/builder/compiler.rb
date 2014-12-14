@@ -206,7 +206,8 @@ module Q
     
     module KnownType
       def get_type
-      
+        super
+      rescue
       end
     end
   end

@@ -18,7 +18,7 @@ def main()
   
   # Connect to the `notify` event of the Property: bar.
   q.notify["bar"].connect() do
-    print("q :bar, changed\n")
+    print("q :bar, changed: #{q.bar}\n")
   end
   
   # Connect to the `said_hello` Signal

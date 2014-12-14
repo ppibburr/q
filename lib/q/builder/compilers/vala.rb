@@ -313,7 +313,23 @@ module Q
       
       def build_str ident = 0
         t = get_indent(ident)
-        if subast[0].symbol.to_sym == :require
+        if (subast[0].symbol.to_sym == :struct or subast[0].symbol.to_sym == :namespace)
+          if subast[1]
+            q = subast[0].symbol.to_sym  
+            (t=subast[1].subast[0])
+            if (cb = t.is_a?(Klass)) or t.is_a?(IFace)
+              t.set_struct true if cb
+              t.set_namespace true unless cb
+              mark_semicolon false
+              t.build_str ident
+            else
+              Q::compile_error self, "in `#{q}` target must be #{cb ? "class" : "module"}."
+            end
+          else
+            Q::compile_error self, "Syntax Error. have '#{q}' but no target"
+          end
+        
+        elsif subast[0].symbol.to_sym == :require
           mark_newline false
           mark_extra_newline false
           mark_prepend_newline false
@@ -590,9 +606,22 @@ module Q
       end
       
       def build_str ident = 0
-        "#{get_indent(ident)}#{visibility}#{iface_type ? " "+class_type : ""} interface #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"+
+        "#{get_indent(ident)}" +
+        unless namespace?
+          "#{visibility}#{iface_type ? " "+class_type : ""} interface #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"
+        else
+          "namespace #{name} {\n"
+        end +
         write_body(ident)+
         "\n#{get_indent(ident)}}"
+      end
+      
+      def set_namespace bool = true
+        @namespace = bool
+      end
+      
+      def namespace?
+        !!@namespace
       end
     end
     
@@ -675,7 +704,13 @@ module Q
         mark_extra_newline
       end
       
-
+      def set_struct bool = true
+        @struct = true
+      end
+      
+      def struct?
+        !!@struct
+      end
       
       def get_childrens_scope
         @childs_scope ||= Q::Compiler::ClassScope.new(self)
@@ -695,7 +730,7 @@ module Q
       end      
       
       def build_str ident = 0
-        "#{get_indent(ident)}#{visibility}#{iface_type ? " "+class_type : ""} class #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"+
+        "#{get_indent(ident)}#{visibility}#{iface_type ? " "+class_type : ""} #{struct? ? "struct" : "class"} #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"+
         write_body(ident)+
         "\n#{get_indent(ident)}}"
       end
@@ -762,7 +797,7 @@ module Q
       end
       
       def is_declaration?
-        subast[1].is_a?(Type)
+        subast[1].is_a?(Type) or (subast[1].is_a?(ConstPathRef) and subast[1].is_a?(Q::Compiler::KnownType))
       end
       
       def assign_local ident=0
@@ -785,6 +820,7 @@ module Q
       end
       
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value), ident = 0
+      p value
         scope.append_lvar type.name, type
         
         if type.infered?
@@ -1336,6 +1372,9 @@ module Q
         symbol = self.symbol
         
         if symbol.to_sym == :initialize
+          if struct?
+            Q::compile_error self, "Structs do not have 'initialize'"
+          end
           rt = ""
           symbol = :construct
           kind = ""
@@ -1351,7 +1390,17 @@ module Q
       end
       
       def kind
-        scope.is_a?(Q::Compiler::ClassScope) ? " virtual" : ""
+        if scope.member.is_a?(IFace)
+          if scope.member.is_a?(Klass) and scope.member.struct?
+            return ""
+          end
+          
+          if scope.member.namespace?
+            return ""
+          end
+          
+          scope.is_a?(Q::Compiler::ClassScope) ? " virtual" : ""
+        end
       end
     end  
     
@@ -1361,11 +1410,14 @@ module Q
       def initialize *o
         super
         @left, @operand, @right = [compiler.handle(node.left), node.operand, compiler.handle(node.right)]
+
       end
       
       def parented par
         super par
-
+        p [par, par.scope,scope, :SCOPE]
+        left.parented self
+        right.parented self
       end
       
       def is_regmatch?
@@ -1470,7 +1522,11 @@ module Q
         super
    
         @exp = compiler.handle(node.exp)
-        @exp.parented self      
+
+        def self.parented par
+          super
+          @exp.parented self  
+        end
       end
       
       def build_str ident = 0
@@ -1774,8 +1830,14 @@ module Q
     class Paren < Base
       handles Q::Ast::Paren
     
+      def parented par
+        super
+        subast.each do |c| c.parented self end 
+      end
+    
       def build_str ident = 0
-        subast[0].build_str ident
+        
+        "(#{subast[0].build_str ident})"
       end    
     end
         
@@ -1796,8 +1858,7 @@ module Q
               @array = t
               @length = t.length
             end
-            
-            @type = t.get_type
+            p [:OK , t, @type = t.get_type]
             
             if t.is_a?(Type)
               @out = t.out?
@@ -1871,6 +1932,26 @@ module Q
       
       def build_str ident = 0
         (" "*ident) + "#{out? ? "out " : "#{ref? ? "ref " : "#{ owned? ? "owned " : "#{unowned? ? "unowned " : ""}"}"}"}#{type}#{array ? "[]" : ""} #{name}"
+      end
+    end
+    
+    class ConstPathRef < Base
+      handles Q::Ast::ConstPathRef
+      def initialize *o
+        super
+        if subast[0].is_a?(Type)
+          extend Q::Compiler::KnownType
+        end
+      end
+      
+      def get_type
+        build_str
+      end
+      
+      def build_str ident = 0
+        "#{get_indent(ident)}" +
+        subast[0].build_str + "." +
+        subast[1].symbol
       end
     end
     
