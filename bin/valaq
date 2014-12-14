@@ -10,6 +10,10 @@ optparse = OptionParser.new do |opts|
     options[:verbose] = v
   end
   
+  opts.on("--introspection NAMESPACE-VERSION", "generate a gir: <NAMESPACE>-<VERSION>.gir") do |v|
+    options[:gir] = v
+  end
+  
   opts.on("--[no-]compile", "compiles") do |v|
     options[:compile] = v
   end  
@@ -110,9 +114,37 @@ f = File.expand_path(secondary_arguments.shift)
 REL_DIR = File.dirname(f)
 perform f, reqs = []
 
+if options[:gir]
+  secondary_arguments.insert(0, "--gir=#{options[:gir]}.gir --library #{options[:gir]} -o lib#{options[:gir].split("-")[0].downcase}.so")
+end
+
 if options[:compile]
-  system "valac #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}".strip
+  puts cmd="valac #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""}".strip
+  system cmd
   system "rm #{vs}" if options[:remove]
+  if options[:gir]
+    puts cmd = "mkdir -p ./q-gir/usr/lib/girepository-1.0 ./q-gir/usr/share/gir-1.0 ./q-gir/usr/share/vala-#{z=`valac --version`.strip.split(" ")[1].split(".")[0..1].join(".")}"
+    system cmd
+    puts cmd = "g-ir-compiler --shared-library=#{q=options[:gir].split("-")[0].downcase} #{options[:gir]}.gir -o #{options[:gir]}.typelib" 
+    system cmd
+    system "mv #{options[:gir]}.typelib ./q-gir/usr/lib/girepository-1.0/"
+    system "mv #{options[:gir]}.gir ./q-gir/usr/share/gir-1.0/"
+    system "mv ./lib#{q}.so ./q-gir/usr/lib/"
+    system "mv #{options[:gir]}.vapi ./q-gir/usr/share/vala-#{z}/"
+    File.open("test_#{q}_gir.rb", "w") do |f|
+      f.puts <<-EOC
+begin
+  require 'gir_ffi'
+rescue
+  require 'rubygems'
+  require 'gir_ffi'
+end
+
+GirFFI.setup '#{options[:gir].split("-")[0]}', '#{options[:gir].split("-")[1]}'
+p #{options[:gir].split("-")[0]}
+      EOC
+    end 
+  end
   if options[:exec]
     system "./#{File.basename(f.gsub(/\.q$/,''))}"
   end
