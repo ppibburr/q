@@ -1,5 +1,13 @@
 Q
 ===
+Ruby Syntax for Vala programming.  
+
+Features
+===
+* implicit public vs vala's explicit
+* regex match objects available with `$~, $1, ...`
+* readability with: static, class and instance variables
+
 
 Install
 ===
