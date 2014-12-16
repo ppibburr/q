@@ -2,6 +2,8 @@ Q
 ===
 Ruby Syntax for Vala programming.  
 
+Read the wiki!
+
 Features
 ===
 * implicit public vs vala's explicit
