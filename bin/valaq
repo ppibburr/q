@@ -120,13 +120,13 @@ end
 
 if options[:compile]
   puts cmd="valac #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""}".strip
-  system cmd
+  exit(1) unless system(cmd)
   system "rm #{vs}" if options[:remove]
   if options[:gir]
     puts cmd = "mkdir -p ./q-gir/usr/lib/girepository-1.0 ./q-gir/usr/share/gir-1.0 ./q-gir/usr/share/vala-#{z=`valac --version`.strip.split(" ")[1].split(".")[0..1].join(".")}"
     system cmd
     puts cmd = "g-ir-compiler --shared-library=#{q=options[:gir].split("-")[0].downcase} #{options[:gir]}.gir -o #{options[:gir]}.typelib" 
-    system cmd
+    exit(1) unless system(cmd)
     system "mv #{options[:gir]}.typelib ./q-gir/usr/lib/girepository-1.0/"
     system "mv #{options[:gir]}.gir ./q-gir/usr/share/gir-1.0/"
     system "mv ./lib#{q}.so ./q-gir/usr/lib/"

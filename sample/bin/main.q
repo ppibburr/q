@@ -10,6 +10,41 @@ def regex_example()
   print($~[2]+"\n\n\n")
 end
 
+# Delegates
+#
+# Defining
+delegate del_name(x: :int) {:int}
+#
+# Using
+# For a method accepting a delegate as a param like so...
+def foo(val: :int, cb: :del_name):int
+  return cb(val)
+end
+#
+# Generics
+#
+# Defining
+class Moof < Object
+  generic_types :G, :T
+  
+  @t = :T
+  @g = :G
+  
+  def set_t(t: :T)
+    @t = t
+  end 
+  
+  def get_t():T
+    return @t
+  end
+end
+#
+
+
+def ed(x: :int, y: :int?, z: :int, d: :int?):void
+  print("ed\n")
+end
+
 def main()
   regex_example()
 
@@ -28,4 +63,18 @@ def main()
   
   # Call `say_hello` method of q.
   q.say_hello()
+
+  num = foo(5) do |val|
+    return val * 5
+  end 
+
+  print("#{num}\n")#=> 25
+
+foot = Moof[:int,:string].new()
+foot.set_t("bar")
+print(foot.get_t())
+foot.g = 5
+print("#{foot.g}\n")
+
+  ed(5,nil,6)
 end

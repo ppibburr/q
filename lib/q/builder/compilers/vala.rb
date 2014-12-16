@@ -665,6 +665,7 @@ module Q
         mark_newline true
         @in = compiler.handle(node.in)
         @what = node.what
+        @type = :int
       end
 
       def get_childrens_scope
@@ -672,10 +673,10 @@ module Q
       end
       
       def build_str ident = 0
-        get_childrens_scope().append_lvar what.to_s, DeclaredType.new(what.to_s, :int)
+        get_childrens_scope().append_lvar what.to_s, DeclaredType.new(what.to_s, @type)
 
         if self.in.is_a?(Q::Range)
-          "#{get_indent(ident)}for (int #{what} = #{self.in.first}; #{what} <= #{self.in.last}; #{what}++) {\n" +
+          "#{get_indent(ident)}for (#{@type} #{what} = #{self.in.first}; #{what} <= #{self.in.last}; #{what}++) {\n" +
           write_body(ident)+
           "\n#{get_indent(ident)}}"
         else
@@ -1354,7 +1355,7 @@ module Q
         rt = return_type ? return_type.type : :void
         
         ret = return_type and return_type.nullable?
-        if ret
+        if ret and rt.to_sym!=:void
           if !subast.find do |q| q.is_a?(Return) end
             ret = "\n\n#{get_indent(ident+2)}return null;"
           else
@@ -1372,7 +1373,7 @@ module Q
         symbol = self.symbol
         
         if symbol.to_sym == :initialize
-          if struct?
+          if scope.member.struct?
             Q::compile_error self, "Structs do not have 'initialize'"
           end
           rt = ""
@@ -1391,13 +1392,14 @@ module Q
       
       def kind
         if scope.member.is_a?(IFace)
-          if scope.member.is_a?(Klass) and scope.member.struct?
+          if scope.member.is_a?(Klass)
+            if scope.member.struct?
+              return ""
+            end
+          elsif scope.member.namespace?
             return ""
           end
           
-          if scope.member.namespace?
-            return ""
-          end
           
           scope.is_a?(Q::Compiler::ClassScope) ? " virtual" : ""
         end
@@ -1812,13 +1814,22 @@ module Q
       
       def build_str ident = 0
         e = For.allocate
+        type = "int"
         _in = subast[0].target.subast[0]
-        what = subast[1].params.untyped[0].name
+        if subast[1].params.untyped[0]
+          what = subast[1].params.untyped[0].name
+        elsif prm=subast[1].params.typed[0]
+          what = prm.name
+          type = prm.type
+        else
+          Q::compile_error self, "no 'what'"
+        end
         s = subast
-        e.instance_exec(_in, what, s) do
+        e.instance_exec() do
           @in = _in
           @what = what
           @_subast = s
+          @type = type
           def self.subast
             @_subast[1].subast
           end
