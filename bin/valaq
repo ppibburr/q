@@ -131,6 +131,8 @@ if options[:compile]
     system "mv #{options[:gir]}.gir ./q-gir/usr/share/gir-1.0/"
     system "mv ./lib#{q}.so ./q-gir/usr/lib/"
     system "mv #{options[:gir]}.vapi ./q-gir/usr/share/vala-#{z}/"
+    puts "GIR creation completed.\nThe information files exist at:"
+    system "ls -LR ./q-gir"
     File.open("test_#{q}_gir.rb", "w") do |f|
       f.puts <<-EOC
 begin
