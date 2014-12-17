@@ -993,7 +993,7 @@ module Q
             return "#{get_indent(ident)}#{type.build_str}"
           end
 
-          "#{get_indent(ident)}public #{scope}#{type.build_str};" 
+          "#{get_indent(ident)}public #{scope} #{type.build_str};" 
         end.join("\n")
       end
     end        
