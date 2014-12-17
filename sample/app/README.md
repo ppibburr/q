@@ -1,0 +1,3 @@
+Compiling
+===
+`valaq main.q`
