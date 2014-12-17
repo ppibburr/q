@@ -18,10 +18,14 @@ module Q
       
       return nil
     end
+    
+    def self.set_flags w,*flags
+      flags.each do |f| w.flags[f] = true end
+    end
 
 
     class Node  
-      attr_accessor :parent, :line, :scope
+      attr_accessor :parent, :line, :scope, :flags
       
       def self.register &b
         (@@q_map ||= {})[self] = b
@@ -37,6 +41,7 @@ module Q
       
       def initialize l
         @line = l
+        @flags = {}
       end
       
       def build_str ident=0
@@ -816,8 +821,21 @@ module Q
       end
     end
 
+    class << self
+      attr_accessor :compiler_type
+    end
+
     def self.handle_has_arguments event, line, *args
-      find_for(event, *args).new(event, line, *args)
+      n = find_for(event, *args).new(event, line, *args)
+      if compiler_type
+        begin
+          if c=compiler_type.find_handler(n,true)
+            set_flags n, c::FLAG
+          end
+        rescue
+        end
+      end
+      return n
     rescue => e
       puts e
       Q.parse_error event,line      

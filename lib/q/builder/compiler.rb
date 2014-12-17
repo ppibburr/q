@@ -146,8 +146,8 @@ module Q
       h.new(node, self)
     end    
     
-    def find_handler(node)
-      a=self.class.handlers[node.class].find_all do |q| q.perform(node) end
+    def self.find_handler(node, bool=false)
+      a=handlers[node.class].find_all do |q| q.perform(node) end
       marked = []
       a.each do |q|
         if a.find do |o| o.overides.index(q.klass) end
@@ -163,8 +163,15 @@ module Q
       
       return klass
     rescue => e
-      puts e
-      Q.parse_error node.event, node.line
+      if !bool
+        puts e
+        Q.parse_error node.event, node.line
+      end
+      raise e    
+    end
+    
+    def find_handler(node)
+      self.class.find_handler(node)
     end
     
     class Handles

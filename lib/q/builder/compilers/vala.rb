@@ -225,6 +225,8 @@ module Q
       end
     end
     
+
+    
     class ARefField < Base
       handles Q::Ast::ARefField
       attr_reader :members
@@ -860,18 +862,18 @@ module Q
       
       def build_str ident = 0
         if variable.respond_to?(:kind)
-		  case variable.kind
-		  when :instance
-		   "#{get_indent(ident)}this."+variable.symbol + do_sets_field + " = #{value.build_str}"
-		  when :local
-			if is_declaration?
-			  get_indent(ident) + declare_field
-			else
-			  get_indent(ident) + assign_local(ident)
-			end
-		  else
-			"#{get_indent(ident)}"+variable.symbol + do_sets_field + " = #{value.build_str}"          
-		  end
+      case variable.kind
+      when :instance
+       "#{get_indent(ident)}this."+variable.symbol + do_sets_field + " = #{value.build_str}"
+      when :local
+      if is_declaration?
+        get_indent(ident) + declare_field
+      else
+        get_indent(ident) + assign_local(ident)
+      end
+      else
+      "#{get_indent(ident)}"+variable.symbol + do_sets_field + " = #{value.build_str}"          
+      end
         else
           raise "cant assign #{variable.kind}: #{variable.symbol}"
         end
@@ -938,7 +940,7 @@ module Q
     
     class ARef < Base
       handles Q::Ast::ARef
-      
+      FLAG = :aref
       def of
         @of ||= compiler.handle(node.of)
       end
@@ -959,9 +961,45 @@ module Q
       end
     end
 
-        
+    class FieldDeclare < Base
+      FLAG = :fld_dec
+      handles Q::Ast::ARef, ARef do
+        of.flags[:type] and values and values.subast[0].is_a?(Q::Ast::VarRef) and [:constant, :global, :instance, :class, :local].index(values.subast[0].variable.kind)
+      end
+      
+      attr_reader :fields, :type
+      def initialize *o
+        super
+        @type     = compiler.handle(node.of)
+        @fields   = compiler.handle(node.values) 
+
+        mark_semicolon false
+      end
+      
+      def build_str ident = 0
+        fields.subast.map do |f| 
+          type = DeclaredType.new(f.variable.symbol, self.type, self.type.is_a?(ArrayDeclaration))
+          
+          scope = case f.variable.kind
+          when :instance
+            ""
+          when :class
+            :static
+          when :global
+            :class
+          when :constant
+            :const
+          else
+            return "#{get_indent(ident)}#{type.build_str}"
+          end
+
+          "#{get_indent(ident)}public #{scope}#{type.build_str};" 
+        end.join("\n")
+      end
+    end        
 
     class Type < Base
+      FLAG = :type
       include Q::Compiler::KnownType
       handles Q::Ast::SymbolLiteral
       
@@ -1077,8 +1115,9 @@ module Q
     end
     
     class ArrayDeclaration < Type
+      FLAG = :type
       handles Q::Ast::ARef, ARef do
-        of.is_a?(Q::Ast::SymbolLiteral) or of.is_a?(Q::Ast::ARef)
+        of.flags[:type] or of.is_a?(Q::Ast::ARef)
       end
       
       attr_reader :of, :length
@@ -1103,7 +1142,7 @@ module Q
       def initialize *o
         super
         @iface = compiler.handle(node.of).build_str
-        @types = node.values.subast.map do |n| compiler.handle(n).get_type end
+        @types = node.values.subast.map do |n| ResolvedType.new(t=compiler.handle(n), t.is_a?(ArrayDeclaration)).type+"#{t.is_a?(ArrayDeclaration) ? "[]" : ""}" end
       end
       
       def build_str ident = 0
@@ -1129,10 +1168,15 @@ module Q
     end
     
     class GenericsDeclaration < Type
+      FLAG = :type
       include GenericsType
       include Q::Compiler::KnownType
       handles Q::Ast::ARef, ARef, ArrayDeclaration do
-        of.is_a?(Q::Ast::SymbolLiteral) and values and values.subast[0] and values.subast[0].is_a?(Q::Ast::SymbolLiteral)
+        of.is_a?(Q::Ast::SymbolLiteral) and values and values.subast[0] and (values.subast[0].flags[:type] or values.subast[0].is_a?(Q::Ast::SymbolLiteral))
+      end
+      def initialize *o
+        super
+        node.flags[:type] = true
       end
     end 
     
@@ -1172,6 +1216,10 @@ module Q
       handles Q::Ast::Variable
       def symbol
         node.symbol
+      end
+      
+      def kind
+        node.kind
       end
       
       def build_str ident = 0
@@ -1556,7 +1604,7 @@ module Q
         @subast.each do |c| c.parented self end
         
         if subast[0].is_a?(Type)
-          @return_type = DeclaredType.new(subast.shift)
+          @return_type = ResolvedType.new(subast.shift)
         end
         
         mark_semicolon false
@@ -1587,7 +1635,7 @@ module Q
           end
         end      
       
-        rt = return_type ? return_type.get_type : :void
+        rt = return_type ? return_type.type : :void
 
       
         if !static_construct? and !constructor?
@@ -1741,6 +1789,7 @@ module Q
     end    
 
     class TypeType < Base
+      FLAG = :type
       handles Q::Ast::Call, Call do;
         target.is_a?(Q::Ast::SymbolLiteral) and (call.symbol.to_s =~ /^ref$/ or call.symbol.to_s =~ /^out$/ or call.symbol.to_s =~ /^(unowned|owned)/)
       end

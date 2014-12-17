@@ -80,7 +80,7 @@ end
 
 require 'q'
 require "q/builder/compilers/vala.rb"
-
+Q::Ast.compiler_type = Q::ValaSourceGenerator
 def vala_file f
   base = File.basename(f)
   dir  = File.dirname(f)
@@ -98,11 +98,11 @@ def perform f, reqs=[]
   Q::COMMENTS.clear
   ast.requires.each do |req|
     if req.ok?
-	  perform req.path, reqs	
+    perform req.path, reqs  
     else
-  	  puts "RequireError: #{req.source} - #{req.line}, no such file: #{req.path}"
-  	  exit 1
-	end
+      puts "RequireError: #{req.source} - #{req.line}, no such file: #{req.path}"
+      exit 1
+  end
   end  
 
   Q::COMMENTS.clear
