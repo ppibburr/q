@@ -18,13 +18,31 @@ Install
 
 USAGE
 ===
+```
+Q Compiler
+
+Usage: valaq file [options] [-- [valac_options]]
+
+    -v, --[no-]verbose               Run verbosely
+        --introspection NAMESPACE-VERSION
+                                     generate a gir: <NAMESPACE>-<VERSION>.gir
+        --[no-]compile               compiles
+        --[no-]remove-generated      Removes generated .vala files
+    -V, --valac VALAC                specify the valac command
+    -e, --exec                       execute after compiling
+        --version                    show the version
+    -h, --help                       Displays this summary
+
+For valac options run 'valac --help'.
+```
+
 * Translation.  
 This will generate `/some/source.vala`  
 `valaq /some/source.q --no-compile`
 
 * Translate and compile
 This will generate `./source`  
-`valaq /some/source.q`
+`valaq /some/source.q [options] [valac_options]`
 
 * multiple sources
 ```ruby
