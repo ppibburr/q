@@ -103,7 +103,7 @@ module Q
         
         @current = -1
         
-        ([Q::ValaSourceGenerator::Def, Q::ValaSourceGenerator::Singleton].index(self.class) ? "#{get_indent(ident+2)}MatchInfo _q_local_scope_match_data;\n" : "") +
+        ([Q::ValaSourceGenerator::Def, Q::ValaSourceGenerator::Singleton].index(self.class) ? "#{get_indent(ident+2)}MatchInfo _q_local_scope_match_data;\n#{get_indent(ident+2)}int _q_local_scope_process_exit_status;\n\n" : "") +
         subast.map do |c|
           @current += 1
           s = ""
@@ -150,10 +150,10 @@ module Q
       
       def write_comment l, ident
         if next_child 
-          if l >= next_child.subast[0].node.line
+          if !next_child.subast[0] or l >= next_child.subast[0].node.line or l >= next_child.node.line or l >= node.line
             ""
           else
-            get_indent(ident)+"// "+comment_at(l).value.strip+"\n"
+            "" # get_indent(ident)+"// "+comment_at(l).value.strip+"\n"
           end
         end
       end
@@ -164,7 +164,7 @@ module Q
         for i in s..e
           a << i if Q::COMMENTS[i]
         end
-        p a,:COMMENTS________________________
+
         return a
       end
     end
@@ -219,6 +219,8 @@ module Q
       def build_str ident = 0
         if kind == :global and symbol.to_s == "~"
           return get_indent(ident) + "#{get_match_data_variable}.fetch_all()"
+        elsif kind == :global and symbol.to_s == "?"
+          return get_indent(ident) + "Process.exit_status(_q_local_scope_process_exit_status)"
         end
         
         get_indent(ident) + "#{kind == :instance ? "this." : ""}#{symbol.to_s}"
@@ -298,7 +300,8 @@ module Q
       end
       
       def build_str ident = 0
-        if !parent.parent.parent.parent.parent.parent.is_a?(Delegate)
+      p [parent.parent.parent.parent.parent.parent, :PARENT]
+        if !parent.parent.parent.parent.parent.parent.is_a?(Delegate) and !parent.parent.parent.parent.parent.is_a?(Signal)
           params.map do |p|
             p.name.to_s + ": " + p.type.to_s
           end.join(", ")
@@ -330,7 +333,9 @@ module Q
           else
             Q::compile_error self, "Syntax Error. have '#{q}' but no target"
           end
-        
+          
+        elsif subast[0].symbol.to_sym == :system
+          "#{t}Process.spawn_command_line_sync(#{subast[1].build_str}, null, null, out _q_local_scope_process_exit_status)"
         elsif subast[0].symbol.to_sym == :require
           mark_newline false
           mark_extra_newline false
@@ -439,8 +444,10 @@ module Q
       end
       
       def params
-        subast[1].subast[0].subast[0].subast[1].subast[0].subast[0]
-      rescue
+        subast[1].subast[0].subast[1]
+        
+      rescue => e
+     
         nil
       end
       
@@ -784,7 +791,10 @@ module Q
       end
       
       def build_str ident = 0
-        subast.map do |c| c.parented self;c.build_str end.join(", ")
+        subast.map do |c|
+          c.parented self;
+          (c.node.flags[:type] ? "typeof (#{c.build_str }#{c.is_a?(ArrayDeclaration) ? "[]" : ""})" : "#{c.build_str }")
+        end.join(", ")
       end
     end
     
@@ -823,7 +833,7 @@ module Q
       end
       
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value), ident = 0
-      p value
+      
         scope.append_lvar type.name, type
         
         if type.infered?
@@ -1224,11 +1234,13 @@ module Q
       
       def build_str ident = 0
         raise "only backrefs should be here" unless node.kind == :backref or node.kind == :global
-        
+        p symbol, :SYM
         if symbol.to_s =~ /^[0-9]+/
           get_match_data_variable+".fetch("+symbol.to_s.gsub(/^$/, '')+")"
         elsif symbol.to_s == "~"
           get_match_data_variable+".fetch_all()"
+        elsif symbol.to_s == "?"
+          "Process.exit_status(_q_local_scope_process_exit_status)"
         else
           raise "Bad value!"
         end
@@ -1774,7 +1786,7 @@ module Q
     
     class ObjectNew < Base
       handles Q::Ast::MethodAddArg, MethodAddArg do
-        subast[0].is_a?(Q::Ast::Call) and (subast[0].target.is_a?(Q::Ast::ARef)  or (subast[0].target.subast[0].respond_to?(:kind) and subast[0].target.subast[0].kind == :constant)) and subast[0].call.symbol.to_s =~ /^new/
+        subast[0].is_a?(Q::Ast::Call) and (subast[0].target.is_a?(Q::Ast::ARef)  or (subast[0].target.subast[0].respond_to?(:kind) and subast[0].target.subast[0].kind == :constant) or subast[0].target.is_a?(Q::Ast::ConstPathRef)) and subast[0].call.symbol.to_s =~ /^new/
       end
       
       def build_str ident = 0
@@ -1784,7 +1796,7 @@ module Q
         method = "." +
         "#{subast[0].what.symbol}".gsub(/^new\_/,'')
       end
-        "new #{subast[0].target.symbol}#{method}(#{subast[1].build_str})"
+        "new #{subast[0].target.build_str}#{method}(#{subast[1].build_str})"
       end
     end    
 
@@ -1896,8 +1908,11 @@ module Q
       end
     
       def build_str ident = 0
-        
-        "(#{subast[0].build_str ident})"
+        if subast[0].node.flags[:type]
+          "#{get_indent(ident)}typeof (#{subast[0].build_str}#{subast[0].is_a?(ArrayDeclaration) ? "[]" : ""})"
+        else
+          "(#{subast[0].build_str ident})"
+        end
       end    
     end
         
