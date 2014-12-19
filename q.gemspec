@@ -14,6 +14,11 @@ Q::SPEC = Gem::Specification.new do |s|
   gem.authors = ["ppibburr"]
 
   s.files         = `git ls-files`.split("\n")
+  
+  s.files.reject! {|f| 
+    f.include?("sample/")
+  }
+  
   s.test_files    = `git ls-files -- {test,spec,features}/*`.split("\n")
   s.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
   s.require_paths = ["lib"]
