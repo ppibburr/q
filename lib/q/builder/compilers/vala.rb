@@ -336,6 +336,8 @@ module Q
           
         elsif subast[0].symbol.to_sym == :system
           "#{t}Process.spawn_command_line_sync(#{subast[1].build_str}, null, null, out _q_local_scope_process_exit_status)"
+        elsif subast[0].symbol.to_sym == :sleep
+          "#{t}Thread.usleep((ulong)(#{subast[1].build_str} * 1000 * 1000))"
         elsif subast[0].symbol.to_sym == :require
           mark_newline false
           mark_extra_newline false
@@ -2091,6 +2093,65 @@ module Q
       def build_str ident = 0
         '$('+subast[0].build_str+')'
       end
-    end 
+    end
+    
+    class Begin < Base
+      include HasBody
+      handles Q::Ast::Begin
+      
+      attr_reader :rescue, :else, :ensure
+      def initialize *o
+        super
+        @rescue = node.rescue ? compiler.handle(node.rescue) : nil
+        @else   = node.else ? compiler.handle(node.else) : nil
+        @ensure = node.ensure ? compiler.handle(node.ensure) : nil
+      
+        mark_prepend_newline true
+        mark_extra_newline true
+        mark_semicolon false      
+      end
+      
+      def build_str ident = 0
+        unless self.rescue
+          Q::compile_error self, "begin without rescue!"
+        end
+      
+        "#{t=get_indent(ident)}try {\n"+
+        write_body(ident)+
+        "#{t}} #{self.rescue.build_str(ident)}" +
+        (self.ensure ? "} "+self.ensure.build_str(ident) : "") +
+        "\n#{t}}"
+      end      
+    end
+    
+    class Rescue < Base
+      include HasBody
+      handles Q::Ast::Rescue
+      
+      attr_reader :next_rescue, :what, :variable
+      def initialize *o
+        super
+        @next_rescue = node.next_rescue ? compiler.handle(node.next_rescue) : nil
+        @what        = node.what ? compiler.handle(node.what[0]) : nil
+        @variable    = node.variable ? compiler.handle(node.variable) : nil                
+      end
+      
+      def build_str ident = 0
+        p variable
+        "#{t=get_indent(ident)}catch (#{what ? what.build_str() : "Error"} #{variable ? variable.variable.symbol : "_q_local_err"}) {\n"+
+        write_body(ident) + 
+        "#{next_rescue ? "\n#{t}} "+next_rescue.build_str(ident) : ""}"
+      end   
+    end
+    
+    class Ensure < Base
+      include HasBody
+      handles Q::Ast::Ensure     
+      def build_str ident=0
+        "#{get_indent(ident)}finally {\n"+
+        write_body(ident)
+      end
+    
+    end        
   end
 end

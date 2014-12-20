@@ -20,6 +20,7 @@ def main(args: :string[]):int
     else
       print("Process #{pid}: Exited with, #{status}\n")
     end
+    sleep 3
     loop.quit()
   end
   

@@ -73,7 +73,7 @@ namespace module POpen
     end
     
     # called when a line is read from the @io_out IOChannel
-    signal on_read(str: :string)
+    signal on_read(str: :string?)
     
     # Begins reading from the @io_out via IOChannel.add_watch
     # @return [bool] true only when data was read.
@@ -84,17 +84,19 @@ namespace module POpen
           return false
         end
         
-        `try {`
-        line = :string
-        channel.read_line(:out << line, nil, nil)
-        on_read(line)
+        begin
+          line = :string
+          channel.read_line(:out << line, nil, nil)
+          on_read(line)
       
-        return true
-        `} catch (IOChannelError e) {`
+          return true
+        
+        rescue IOChannelError => e
           return false
-        `} catch (ConvertError e) {`
+        
+        rescue ConvertError => e
           return false
-        `}`
+        end
       end
     end
   end

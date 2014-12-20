@@ -207,6 +207,63 @@ module Q
       end
     end
     
+    class Begin < Event
+      include HasArguments
+      register do :begin end
+      attr_reader :else, :ensure, :rescue
+      def initialize *o
+        super
+
+        @ensure = subast.pop
+        @else   = subast.pop
+        @rescue = subast.pop    
+        @body = subast.pop.children            
+      end
+      
+      def subast
+        p @body
+        @body || super[0].subast
+      end
+    end
+    
+    class Rescue < Event
+      include HasArguments
+      register do :rescue end
+      attr_reader :what, :variable, :next_rescue
+      def initialize *o
+        super
+        @what        = subast.shift
+        @variable    = subast.shift
+        @next_rescue = subast.pop
+        @body        = subast[0].children
+      end
+      
+      def subast
+        p @body
+        @body || super
+      end
+    end
+    
+    class Retry < Event
+      include HasArguments
+      register do :retry end
+      def initialize *o
+        super
+
+      end
+    end    
+    
+    class Ensure < Event
+      include HasArguments
+      register do :ensure end
+      def initialize *o
+        super
+      end
+      def subast
+        super[0].children
+      end
+    end    
+    
     class RegexpEnd < Event
       include HasArguments
       register do :"@regexp_end" end
