@@ -2,7 +2,30 @@ $: << File.dirname(__FILE__)
 require "source_generator"
 
 module Q
+
+  
   class ValaSourceGenerator < Q::SourceGenerator
+      class MethodScope  < Q::Compiler::MethodScope
+        def mark_has_match_data bool= true
+          @match_data = bool
+        end
+        
+        def mark_has_process_exit_status bool =  true
+          @proc_exit_status = true
+        end
+        
+        def marked_match_data?
+          !!@match_data
+        end
+        
+        def marked_process_exit_status?
+          !!@proc_exit_status
+        end
+      end
+      
+      class BlockScope < Q::Compiler::BlockScope
+      end
+  
     def handle *o
       res = super
       if !res.is_a?(Modifier) and !res.is_a?(HasModifiers) and !modifiers.empty?
@@ -102,9 +125,11 @@ module Q
       def write_body ident = 0
         
         @current = -1
+       
+
         
-        ([Q::ValaSourceGenerator::Def, Q::ValaSourceGenerator::Singleton].index(self.class) ? "#{get_indent(ident+2)}MatchInfo _q_local_scope_match_data;\n#{get_indent(ident+2)}int _q_local_scope_process_exit_status;\n\n" : "") +
-        subast.map do |c|
+        
+        d = subast.map do |c|
           @current += 1
           s = ""
           hc = nil 
@@ -128,6 +153,27 @@ module Q
           (hc ? write_comment(c.node.line,0).gsub(/\n$/,'') + s : "") +
           write_comments(ident+2)
         end.join
+        
+                s = ""       
+        
+        if [Q::ValaSourceGenerator::Def, Q::ValaSourceGenerator::Singleton].index(self.class)
+
+          if get_childrens_scope.marked_match_data?
+            s += "#{t=get_indent(ident+2)}string?[] _q_local_scope_empty_str_array = new string[0];\n" + 
+            "#{t}MatchInfo _q_local_scope_match_data = null;\n"
+          end
+          
+          if get_childrens_scope.marked_process_exit_status?
+            s += "#{get_indent(ident+2)}int _q_local_scope_process_exit_status = null;\n"
+          end
+          
+          if s != ""
+            s += "\n"
+            d = s + d
+          end
+        end
+        
+        return d
       end
       
       def next_child
@@ -218,8 +264,21 @@ module Q
       
       def build_str ident = 0
         if kind == :global and symbol.to_s == "~"
-          return get_indent(ident) + "#{get_match_data_variable}.fetch_all()"
+          scope.until_nil do |q|
+            if q.member.is_a?(Def)
+              q.mark_has_match_data true
+              break
+            end
+          end
+         
+          return get_indent(ident) + "(((#{get_match_data_variable} != null) && (#{get_match_data_variable}.fetch_all() != null)) ? #{get_match_data_variable}.fetch_all() : _q_local_scope_empty_str_array)"
         elsif kind == :global and symbol.to_s == "?"
+          scope.until_nil do |q|
+            if q.member.is_a?(Def)
+              q.mark_has_process_exit_status true
+              break
+            end
+          end        
           return get_indent(ident) + "Process.exit_status(_q_local_scope_process_exit_status)"
         end
         
@@ -338,6 +397,9 @@ module Q
           "#{t}Process.spawn_command_line_sync(#{subast[1].build_str}, null, null, out _q_local_scope_process_exit_status)"
         elsif subast[0].symbol.to_sym == :sleep
           "#{t}Thread.usleep((ulong)(#{subast[1].build_str} * 1000 * 1000))"
+        elsif subast[0].symbol.to_sym == :puts
+          "#{t}stdout.printf(#{subast[1].build_str}); " +
+          "#{t}stdout.printf(\"\\n\")"          
         elsif subast[0].symbol.to_sym == :require
           mark_newline false
           mark_extra_newline false
@@ -680,7 +742,7 @@ module Q
       end
 
       def get_childrens_scope
-        @childs_scope ||= Q::Compiler::Scope.new(self)
+        @childs_scope ||= BlockScope.new(self)
       end
       
       def build_str ident = 0
@@ -1236,9 +1298,9 @@ module Q
       
       def build_str ident = 0
         raise "only backrefs should be here" unless node.kind == :backref or node.kind == :global
-        p symbol, :SYM
+        
         if symbol.to_s =~ /^[0-9]+/
-          get_match_data_variable+".fetch("+symbol.to_s.gsub(/^$/, '')+")"
+          "(#{get_match_data_variable} != null ? #{get_match_data_variable}.fetch("+symbol.to_s.gsub(/^$/, '')+") : null)"
         elsif symbol.to_s == "~"
           get_match_data_variable+".fetch_all()"
         elsif symbol.to_s == "?"
@@ -1400,7 +1462,7 @@ module Q
       end
       
       def get_childrens_scope
-        @childs_scope ||= Q::Compiler::Scope.new(self)
+        @childs_scope ||= MethodScope.new(self)
       end
      
       def build_str ident = 0
@@ -1470,16 +1532,25 @@ module Q
     
     class Binary < Base
       handles Q::Ast::Binary
-      attr_reader :right, :left, :operand
+      attr_reader :right, :left
       def initialize *o
         super
         @left, @operand, @right = [compiler.handle(node.left), node.operand, compiler.handle(node.right)]
 
       end
       
+      def operand
+        l = ["&&", "||"]
+        if i = [:and, :or].index(@operand.to_sym) 
+          return l[i]
+        end
+        
+        @operand
+      end
+      
       def parented par
         super par
-        p [par, par.scope,scope, :SCOPE]
+
         left.parented self
         right.parented self
       end
@@ -1635,7 +1706,7 @@ module Q
       end
       
       def get_childrens_scope
-        @childs_scope ||= Q::Compiler::Scope.new(self)
+        @childs_scope ||= MethodScope.new(self)
       end
       
       def build_str ident = 0
@@ -1746,7 +1817,7 @@ module Q
         if r=@childs_scope
          return r
         end
-        r =@childs_scope = Q::Compiler::Scope.new(self)
+        r =@childs_scope = Q::BlockScope.new(self)
         
         return r
       end
@@ -1863,7 +1934,7 @@ module Q
       end
       
       def get_childrens_scope
-        @childs_scope ||= Q::Compiler::Scope.new(self)
+        @childs_scope ||= BlockScope.new(self)
       end
     end
 

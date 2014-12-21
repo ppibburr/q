@@ -112,29 +112,29 @@ namespace module POpen
     
     pid = :Pid    
     
-    `try {`
-    Process.spawn_async_with_pipes(nil,
-      args,
-      Environ.get(),
-      SpawnFlags::SEARCH_PATH | SpawnFlags::DO_NOT_REAP_CHILD,
-      nil,
-      :out << pid,
-      :out << stdin,
-      :out << stdout,
-      :out << stderr);
+    begin
+      Process.spawn_async_with_pipes(nil,
+        args,
+        Environ.get(),
+        SpawnFlags::SEARCH_PATH | SpawnFlags::DO_NOT_REAP_CHILD,
+        nil,
+        :out << pid,
+        :out << stdin,
+        :out << stdout,
+        :out << stderr);
+        
+      pipe = Pipe.new(pid, stdin, stdout ,stderr)
       
-    pipe = Pipe.new(pid, stdin, stdout ,stderr)
+      cb(pipe)
+      
+      watch = POpen::Watch.new(pid) 
+      watch.pipe = pipe
+      watch.ok = true
+      
+      return watch  
     
-    cb(pipe)
-    
-    watch = POpen::Watch.new(pid) 
-    watch.pipe = pipe
-    watch.ok = true
-    
-    return watch  
-    
-    `} catch(SpawnError e) {`
+    rescue SpawnError => e
       return POpen::Watch.new(pid)
-    `}`
+    end
   end
 end
