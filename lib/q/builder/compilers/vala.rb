@@ -164,7 +164,7 @@ module Q
           end
           
           if get_childrens_scope.marked_process_exit_status?
-            s += "#{get_indent(ident+2)}int _q_local_scope_process_exit_status = null;\n"
+            s += "#{get_indent(ident+2)}int? _q_local_scope_process_exit_status = null;\n"
           end
           
           if s != ""
@@ -280,7 +280,7 @@ module Q
             end
           end        
           return get_indent(ident) + "Process.exit_status(_q_local_scope_process_exit_status)"
-        end
+        end  
         
         get_indent(ident) + "#{kind == :instance ? "this." : ""}#{symbol.to_s}"
       end
@@ -394,6 +394,13 @@ module Q
           end
           
         elsif subast[0].symbol.to_sym == :system
+          scope.until_nil do |q|
+            if q.member.is_a?(Def)
+              q.mark_has_process_exit_status true
+              break
+            end
+          end  
+                  
           "#{t}Process.spawn_command_line_sync(#{subast[1].build_str}, null, null, out _q_local_scope_process_exit_status)"
         elsif subast[0].symbol.to_sym == :sleep
           "#{t}Thread.usleep((ulong)(#{subast[1].build_str} * 1000 * 1000))"
@@ -1297,14 +1304,18 @@ module Q
       end
       
       def build_str ident = 0
-        raise "only backrefs should be here" unless node.kind == :backref or node.kind == :global
+        raise "only backrefs should be here" unless node.kind == :backref or node.kind == :global 
         
         if symbol.to_s =~ /^[0-9]+/
-          "(#{get_match_data_variable} != null ? #{get_match_data_variable}.fetch("+symbol.to_s.gsub(/^$/, '')+") : null)"
-        elsif symbol.to_s == "~"
-          get_match_data_variable+".fetch_all()"
-        elsif symbol.to_s == "?"
-          "Process.exit_status(_q_local_scope_process_exit_status)"
+          scope.until_nil do |q|
+            if q.member.is_a?(Def)
+              q.mark_has_match_data true
+              break
+            end
+          end
+                  
+          "(#{get_match_data_variable} != null ? #{get_match_data_variable}.fetch("+symbol.to_s.gsub(/^$/, '')+") : _q_local_scope_empty_str_array[0])"
+
         else
           raise "Bad value!"
         end
@@ -1571,6 +1582,14 @@ module Q
       
       def build_str(ident = 0)
         if is_regmatch?
+          scope.until_nil do |q|
+            if q.member.is_a?(Def)
+              q.mark_has_match_data true
+              break
+            end
+          end
+          
+                  
           return "#{get_indent(ident)}(#{right.build_str}).match(#{left.build_str}, 0, out #{get_match_data_variable})"
         end
         
@@ -1817,7 +1836,7 @@ module Q
         if r=@childs_scope
          return r
         end
-        r =@childs_scope = Q::BlockScope.new(self)
+        r =@childs_scope = BlockScope.new(self)
         
         return r
       end
