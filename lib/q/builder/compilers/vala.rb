@@ -25,6 +25,10 @@ module Q
       
       class BlockScope < Q::Compiler::BlockScope
       end
+      
+      class PropertyScope < BlockScope
+      
+      end
   
     def handle *o
       res = super
@@ -546,6 +550,10 @@ module Q
         subast[0].is_a?(Q::Ast::Variable) and subast[0].symbol.to_sym == :property
       end
       
+      def get_childrens_scope
+        @childs_scope ||= PropertyScope.new(self)
+      end
+      
       def initialize *o
         super
         
@@ -562,8 +570,12 @@ module Q
       end      
       
       def build_str ident = 0
+        ary = ""
+        if subast[1].subast[0].params[0].array
+          ary = "[]"
+        end
         get_indent(ident) + 
-        "#{visibility} #{target} #{type} #{symbol}"
+        "#{visibility} #{target} #{type}#{ary} #{symbol}"
       end
     end       
     
@@ -889,7 +901,7 @@ module Q
         
       
         Q::compile_error(self,"Cant assign local variable in #{scope.class}") unless scope and ![Q::Compiler::ClassScope].index(scope)
-        
+
         if scope.declared?(variable.symbol)
           type = scope.get_lvar_type(variable.symbol)
         else
@@ -910,10 +922,12 @@ module Q
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value), ident = 0
       
         scope.append_lvar type.name, type
-        
+        File.open("qqq.txt","a") do |f| f.puts "#{type.name}: #{scope}\n" end
         if type.infered?
           p type
           "var #{variable.symbol} = #{value.build_str(ident).strip}"
+        elsif scope.member.parent.is_a?(PropertyWithBlock)
+          "#{variable.symbol} = new #{type.type}[#{type.array.length}]"
         else
           q = "#{type.build_str}" + 
           if type.array and type.array.length
@@ -1869,6 +1883,10 @@ module Q
       include HasBody
       handles Q::Ast::MethodAddBlock, MethodAddBlock do
         subast[0].is_a?(Q::Ast::Command) and subast[0].subast[0].symbol.to_sym == :property;
+      end
+      
+      def get_childrens_scope
+        @childs_scope ||= PropertyScope.new(self)
       end
       
       def build_str ident = 0
