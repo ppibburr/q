@@ -135,6 +135,11 @@ module Q
       register do :return end
     end
     
+    class Return0 < Event
+      include HasArguments
+      register do :return0 end
+    end    
+    
     class Next < Event
       include HasArguments
       register do :next end

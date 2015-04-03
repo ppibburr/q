@@ -1,4 +1,11 @@
 #!/usr/bin/env ruby
+
+
+require 'q'
+require "q/builder/compilers/vala.rb"
+
+Q::Ast.compiler_type = Q::ValaSourceGenerator
+
 require 'optparse'
 ARGV << '-h' if ARGV.empty? or ARGV[0] =~ /^\-/
 
@@ -42,7 +49,7 @@ optparse = OptionParser.new do |opts|
     options[:include_dir] = v
   end  
   
-  opts.on("--pkgconfig-dir LOCATION", "specify location to install .pc files. only valid with `--install-gir`") do |v|
+  opts.on("--pconfig-dir LOCATION", "specify location to install .pc files. only valid with `--install-gir`") do |v|
     options[:pc_dir] = v
   end            
   
@@ -110,11 +117,6 @@ if options[:verbose]
   secondary_arguments << "-v"
 end
 
-require 'q'
-require "q/builder/compilers/vala.rb"
-
-Q::Ast.compiler_type = Q::ValaSourceGenerator
-
 VALAC_COMMAND = options[:valac_command] || "valac"
 VALA_VERSION  = `#{VALAC_COMMAND} --version`.strip.split(" ")[1].split(".")[0..1].join(".")
 
@@ -172,7 +174,7 @@ perform f, reqs = []
 if options[:gir]
   secondary_arguments.insert(0, "--gir=#{options[:gir]}.gir --header=#{z=options[:gir].split("-")[0].downcase}.h --library #{options[:gir]} -o lib#{z}.so")
 end
-
+p secondary_arguments
 if options[:compile]
   puts cmd="valac #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""}".strip
   exit(1) unless system(cmd)

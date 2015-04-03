@@ -29,7 +29,7 @@ module Q
     def handle *o
       res = super
       if !res.is_a?(Modifier) and !res.is_a?(HasModifiers) and !modifiers.empty?
-      
+
       elsif res.is_a?(HasModifiers)
         modifiers.each do |m|
           res.apply_modifier m
@@ -45,6 +45,8 @@ module Q
     end
   
     class Base < Member
+      attr_accessor :scope
+    
       COMPILER = Q::ValaSourceGenerator
       def initialize *o
         super
@@ -59,7 +61,7 @@ module Q
       def parented par
         @parent = par
         @scope = par.get_childrens_scope
-        subast.each do |c| c.parented self end 
+        subast.each do |c| c.parented self end   
       end
       
       def get_match_data_variable
@@ -366,7 +368,7 @@ module Q
           end.join(", ")
         else
           params.map do |p|
-            p.type + " " + p.name.to_s
+            p.type + "#{p.array ? "[]" : ""}" + " " + p.name.to_s
           end.join(", ")
         end
       end
@@ -405,8 +407,7 @@ module Q
         elsif subast[0].symbol.to_sym == :sleep
           "#{t}Thread.usleep((ulong)(#{subast[1].build_str} * 1000 * 1000))"
         elsif subast[0].symbol.to_sym == :puts
-          "#{t}stdout.printf(#{subast[1].build_str}); " +
-          "#{t}stdout.printf(\"\\n\")"          
+          "#{t}stdout.puts(#{subast[1].build_str}); "        
         elsif subast[0].symbol.to_sym == :require
           mark_newline false
           mark_extra_newline false
@@ -439,7 +440,7 @@ module Q
     
     class Using < Base
       handles Q::Ast::Command, Command do
-        subast[0].symbol.to_sym == :include
+        subast[0].symbol.to_sym == :using
       end
       def build_str ident = 0
         get_indent(ident)+"using #{subast[1].build_str}"
@@ -881,26 +882,29 @@ module Q
       end
       
       def is_declaration?
-        subast[1].is_a?(Type) or (subast[1].is_a?(ConstPathRef) and subast[1].is_a?(Q::Compiler::KnownType))
+        (subast[1].is_a?(Type) or (subast[1].is_a?(ConstPathRef) and subast[1].is_a?(Q::Compiler::KnownType))) and !subast[0].is_a?(ARefField)
       end
       
       def assign_local ident=0
+        
+      
         Q::compile_error(self,"Cant assign local variable in #{scope.class}") unless scope and ![Q::Compiler::ClassScope].index(scope)
         
         if scope.declared?(variable.symbol)
           type = scope.get_lvar_type(variable.symbol)
         else
           # warn declaration by infered type
+          p value, :VAL
           if type = DeclaredType.new(variable.symbol, value) and !type.infered?
             return declare_field(type)+ "; " + assign_local
-          else
+          elsif !subast[0].is_a?(ARefField)
             return declare_field(DeclaredType.new(variable.symbol, nil), ident)
           end
         end
  
         _new = ""
         
-        "#{variable.symbol} = #{_new}#{value.build_str(ident).strip}"
+        "#{variable.symbol}#{do_sets_field} = #{_new}#{value.build_str(ident).strip}"
       end
       
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value), ident = 0
@@ -908,6 +912,7 @@ module Q
         scope.append_lvar type.name, type
         
         if type.infered?
+          p type
           "var #{variable.symbol} = #{value.build_str(ident).strip}"
         else
           q = "#{type.build_str}" + 
@@ -943,18 +948,18 @@ module Q
       
       def build_str ident = 0
         if variable.respond_to?(:kind)
-      case variable.kind
-      when :instance
-       "#{get_indent(ident)}this."+variable.symbol + do_sets_field + " = #{value.build_str}"
-      when :local
-      if is_declaration?
-        get_indent(ident) + declare_field
-      else
-        get_indent(ident) + assign_local(ident)
-      end
-      else
-      "#{get_indent(ident)}"+variable.symbol + do_sets_field + " = #{value.build_str}"          
-      end
+          case variable.kind
+          when :instance
+            "#{get_indent(ident)}#{scope.is_a?(Q::Compiler::StructScope)? "" : "this."}"+variable.symbol + do_sets_field + " = #{value.build_str}"
+          when :local
+            if is_declaration?
+              get_indent(ident) + declare_field
+            else
+              get_indent(ident) + assign_local(ident)
+            end
+          else
+            "#{get_indent(ident)}"+variable.symbol + do_sets_field + " = #{value.build_str}"          
+          end
         else
           raise "cant assign #{variable.kind}: #{variable.symbol}"
         end
@@ -1045,7 +1050,7 @@ module Q
     class FieldDeclare < Base
       FLAG = :fld_dec
       handles Q::Ast::ARef, ARef do
-        of.flags[:type] and values and values.subast[0].is_a?(Q::Ast::VarRef) and [:constant, :global, :instance, :class, :local].index(values.subast[0].variable.kind)
+        of.flags[:type] and values and values.subast[0].is_a?(Q::Ast::VarRef) and [:global, :instance, :class].index(values.subast[0].variable.kind)
       end
       
       attr_reader :fields, :type
@@ -1205,8 +1210,11 @@ module Q
       def initialize *o
         super
         @of = compiler.handle(node.of)
-     
-        @length = node.values.subast.map do |n| compiler.handle(n) end[0].node.value if node.values
+        begin
+          @length = node.values.subast.map do |n| compiler.handle(n) end[0].node.value if node.values
+        rescue
+          @length = node.values.subast.map do |n| compiler.handle(n) end[0].symbol if node.values
+        end
       end
       
       def value
@@ -1263,6 +1271,13 @@ module Q
     
     class VCall < Base
       handles Q::Ast::VCall
+      def kind
+        subast[0].kind
+      end
+      
+      def symbol
+        subast[0].symbol
+      end
       
       def build_str ident = 0
         get_indent(ident) + subast[0].symbol
@@ -1383,6 +1398,13 @@ module Q
       end
     end
     
+    class Return0 < Base
+      handles Q::Ast::Return0
+      def build_str ident = 0
+        get_indent(ident) + "return"
+      end
+    end    
+    
     class Next < Return
       handles Q::Ast::Next
     end
@@ -1448,6 +1470,145 @@ module Q
         value
       end   
     end
+    
+    class If < Base
+      include HasBody
+      handles Q::Ast::If
+      attr_reader :type, :exp, :else
+      def initialize *o
+        super
+        @type = :if
+        @exp = compiler.handle(node.exp)
+        @exp.parented self
+        @else = compiler.handle(node.else) if node.else
+      end
+      
+      def parented *o
+        q = super
+        p self.scope;
+        if @else
+          @else.parented self
+        end
+                @else.scope = self.scope if @else
+        q
+      end
+      
+      def build_str ident = 0
+        
+        if self.class == Q::ValaSourceGenerator::If
+          mark_prepend_newline true
+        end
+        
+        (t=get_indent(ident)) +
+        "#{type.to_s.gsub("elsif", "else if")} (#{exp.build_str}) {\n"+
+        write_body(ident)+
+        "\n#{t}}" +
+        (self.else ? "\n"+self.else.build_str(ident) : "")
+      end      
+    end
+    
+    class ElsIf < If
+      handles Q::Ast::ElsIf
+      def initialize *o
+        super
+        @type = :elsif
+      end
+    end
+    
+    class Begin < Base
+      include HasBody
+      handles Q::Ast::Begin
+      
+      attr_reader :rescue, :else, :ensure
+      def initialize *o
+        super
+        @rescue = node.rescue ? compiler.handle(node.rescue) : nil
+        @else   = node.else ? compiler.handle(node.else) : nil
+        @ensure = node.ensure ? compiler.handle(node.ensure) : nil
+      
+        mark_prepend_newline true
+        mark_extra_newline true
+        mark_semicolon false      
+      end
+      
+      def build_str ident = 0
+        unless self.rescue
+          Q::compile_error self, "begin without rescue!"
+        end
+      
+        "#{t=get_indent(ident)}try {\n"+
+        write_body(ident)+
+        "#{t}} #{self.rescue.build_str(ident)}" +
+        (self.ensure ? "} "+self.ensure.build_str(ident) : "") +
+        "\n#{t}}"
+      end      
+    end
+    
+    class Rescue < Base
+      include HasBody
+      handles Q::Ast::Rescue
+      
+      attr_reader :next_rescue, :what, :variable
+      def initialize *o
+        super
+        @next_rescue = node.next_rescue ? compiler.handle(node.next_rescue) : nil
+        @what        = node.what ? compiler.handle(node.what[0]) : nil
+        @variable    = node.variable ? compiler.handle(node.variable) : nil                
+      end
+      
+      def build_str ident = 0
+        p variable
+        "#{t=get_indent(ident)}catch (#{what ? what.build_str() : "Error"} #{variable ? variable.variable.symbol : "_q_local_err"}) {\n"+
+        write_body(ident) + 
+        "#{next_rescue ? "\n#{t}} "+next_rescue.build_str(ident) : ""}"
+      end   
+    end
+    
+    class Ensure < Base
+      include HasBody
+      handles Q::Ast::Ensure     
+      def build_str ident=0
+        "#{get_indent(ident)}finally {\n"+
+        write_body(ident)
+      end
+    
+    end      
+    
+    class Else < Base
+      include HasBody
+      handles Q::Ast::Else
+      
+      def build_str ident = 0
+        (t=get_indent(ident)) +
+        "else {\n"+
+        write_body(ident)+
+        "\n#{t}}"
+      end
+    end
+
+    class While < Base
+      include HasBody
+      handles Q::Ast::While
+   
+      attr_reader :exp   
+      def initialize *o
+        super
+   
+        @exp = compiler.handle(node.exp)
+
+        def self.parented par
+          super
+          @exp.parented self  
+        end
+      end
+      
+      def build_str ident = 0
+        (t=get_indent(ident)) +
+        "while (#{exp.build_str}) {\n"+
+        write_body(ident)+
+        "\n#{t}}"
+      end
+    end    
     
     class Def < Base
       include HasBody
@@ -1535,8 +1696,8 @@ module Q
             return ""
           end
           
-          
-          scope.is_a?(Q::Compiler::ClassScope) ? " virtual" : ""
+            
+          scope.is_a?(Q::Compiler::ClassScope) ? " #{@modifiers.index(:override) ? "override" : "virtual"}" : ""
         end
       end
     end  
@@ -1620,76 +1781,6 @@ module Q
         end
       end
     end    
-    
-    class If < Base
-      include HasBody
-      handles Q::Ast::If
-      attr_reader :type, :exp, :else
-      def initialize *o
-        super
-        @type = :if
-        @exp = compiler.handle(node.exp)
-        @exp.parented self
-        @else = compiler.handle(node.else) if node.else
-        @else.parented self if @else
-      end
-      
-      def build_str ident = 0
-        if self.class == Q::ValaSourceGenerator::If
-          mark_prepend_newline true
-        end
-        
-        (t=get_indent(ident)) +
-        "#{type.to_s.gsub("elsif", "else if")} (#{exp.build_str}) {\n"+
-        write_body(ident)+
-        "\n#{t}}" +
-        (self.else ? "\n"+self.else.build_str(ident) : "")
-      end      
-    end
-    
-    class ElsIf < If
-      handles Q::Ast::ElsIf
-      def initialize *o
-        super
-        @type = :elsif
-      end
-    end
-    
-    class Else < Base
-      include HasBody
-      handles Q::Ast::Else
-      
-      def build_str ident = 0
-        (t=get_indent(ident)) +
-        "else {\n"+
-        write_body(ident)+
-        "\n#{t}}"
-      end
-    end
-
-    class While < Base
-      include HasBody
-      handles Q::Ast::While
-   
-      attr_reader :exp   
-      def initialize *o
-        super
-   
-        @exp = compiler.handle(node.exp)
-
-        def self.parented par
-          super
-          @exp.parented self  
-        end
-      end
-      
-      def build_str ident = 0
-        (t=get_indent(ident)) +
-        "while (#{exp.build_str}) {\n"+
-        write_body(ident)+
-        "\n#{t}}"
-      end
-    end
     
     class Singleton < Base
       handles Q::Ast::DefS
@@ -2012,7 +2103,7 @@ module Q
       attr_accessor :array, :type
       def initialize t, a=false
         @array = a
-        
+       
         if t.is_a?(TypeType)
           t = t.target
         end
@@ -2185,63 +2276,6 @@ module Q
       end
     end
     
-    class Begin < Base
-      include HasBody
-      handles Q::Ast::Begin
       
-      attr_reader :rescue, :else, :ensure
-      def initialize *o
-        super
-        @rescue = node.rescue ? compiler.handle(node.rescue) : nil
-        @else   = node.else ? compiler.handle(node.else) : nil
-        @ensure = node.ensure ? compiler.handle(node.ensure) : nil
-      
-        mark_prepend_newline true
-        mark_extra_newline true
-        mark_semicolon false      
-      end
-      
-      def build_str ident = 0
-        unless self.rescue
-          Q::compile_error self, "begin without rescue!"
-        end
-      
-        "#{t=get_indent(ident)}try {\n"+
-        write_body(ident)+
-        "#{t}} #{self.rescue.build_str(ident)}" +
-        (self.ensure ? "} "+self.ensure.build_str(ident) : "") +
-        "\n#{t}}"
-      end      
-    end
-    
-    class Rescue < Base
-      include HasBody
-      handles Q::Ast::Rescue
-      
-      attr_reader :next_rescue, :what, :variable
-      def initialize *o
-        super
-        @next_rescue = node.next_rescue ? compiler.handle(node.next_rescue) : nil
-        @what        = node.what ? compiler.handle(node.what[0]) : nil
-        @variable    = node.variable ? compiler.handle(node.variable) : nil                
-      end
-      
-      def build_str ident = 0
-        p variable
-        "#{t=get_indent(ident)}catch (#{what ? what.build_str() : "Error"} #{variable ? variable.variable.symbol : "_q_local_err"}) {\n"+
-        write_body(ident) + 
-        "#{next_rescue ? "\n#{t}} "+next_rescue.build_str(ident) : ""}"
-      end   
-    end
-    
-    class Ensure < Base
-      include HasBody
-      handles Q::Ast::Ensure     
-      def build_str ident=0
-        "#{get_indent(ident)}finally {\n"+
-        write_body(ident)
-      end
-    
-    end        
   end
 end

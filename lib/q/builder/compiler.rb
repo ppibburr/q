@@ -46,18 +46,24 @@ module Q
         end
         
         if member.parent and member.parent.scope and member.parent.scope.declared?(name)
-          true
+          return true
+        end
+        
+        if member.scope != self
+          return member.scope.declared?(name)
         end
       end
       
+      attr_accessor :locals
       def get_lvar_type name
         raise "lvar #{name} not declared" unless type=declared?(name)
         if q=@locals[name]
           return q
         end
-        
+
         if member.parent and member.parent.scope and member.parent.scope.declared?(name)
-          member.parent.scope.get_lvar_type(name)
+          
+          return member.parent.scope.get_lvar_type(name)
         end
       end
     end
