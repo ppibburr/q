@@ -1,15 +1,15 @@
 
 namespace module BattleShip
   using Gtk
-  
+ 
   class Player < Object
-    property grid: :Grid do get; set; end
-    property game: :Game do; get; set; end
-    property ships_visible: :bool do get; set; end
+    attr_accessor grid: :Grid,
+                  game: :Game, 
+                  ships_visible: :bool,
+                  ships: :Ship[5]   
    
-    @ships = :Ship[5]   
-   
-    signal lost_game()
+    signal;
+    def lost_game(); end
    
 
     def self.new(game: :Game)                     
@@ -133,13 +133,16 @@ namespace module BattleShip
     @hits    = :Cell[]
     @n_hits  = 0
     
-    property computer: :Computer do set; get; end
-    property first_hit: :Cell? do set; get; end
-    property last_hit: :Cell? do set; get; end
-    property last_guess: :Cell? do set; get; end
+    attr_accessor computer: :Computer,
+                  first_hit: :Cell?,
+                  last_hit: :Cell?,
+                  last_guess: :Cell?
     
-    # signal sunk_ship(ship: :Ship)
-    # signal found_target(coords: :Cell[])
+    # signal; 
+    # def sunk_ship(ship: :Ship); end
+    # 
+    # signal; 
+    # def found_target(coords: :Cell[]); end
     
     def self.new(comp:Computer)
       Object(computer:comp)
@@ -275,8 +278,8 @@ namespace module BattleShip
   end
   
   class Computer < Player
-    property targeter: :Targeter do set; get; end    
-    # property pending_strike: :bool do get; set; end
+    attr_accessor targeter: :Targeter #,   
+                  # pending_strike: :bool do get; set; end
     
     # @n_strike_targets = 0
     # @strike_targets   = :Cell?[]
@@ -416,18 +419,20 @@ namespace module BattleShip
   
   class Game < Object
     :ToolButton[@quit_button, @new_game_button, @redraw_button]
+    
     @status_bar = :Statusbar
     @context_id = :uint
     
     
-    property window: :Gtk::Window do; get; set; end
-    property player: :Player do;get; set; end
-    property computer: :Computer do; get; set; end
-    property active: :bool do set; get; end
-    property wins: :int do set; get; end
-    property losts: :int do set; get; end
+    attr_accessor window: :Gtk::Window,
+                  player: :Player,
+                  computer: :Computer,
+                  active: :bool,
+                  wins: :int,
+                  losts: :int
     
-    signal activate()
+    signal; 
+    def activate(); end
     
     def self.new(win:Window)
       @active = false
@@ -528,11 +533,11 @@ namespace module BattleShip
   end
   
   class Cell < Button
-    property x: :int do; set; get; end
-    property y: :int do; set; get; end
-    property state: :int do; set; get; end
-    property ostate: :int do; set; get; end
-    property ship: :Ship? do; set; get; end
+    attr_accessor x: :int,
+                  y: :int,
+                  state: :int,
+                  ostate: :int,
+                  ship: :Ship?
     
     STATE_HIT   = 1
     STATE_MISS  = 2
@@ -572,7 +577,7 @@ namespace module BattleShip
   end
   
   class Grid < Object
-    property player:Player do; get; set; end
+    attr_accessor player: :Player
     
     @widget = :Box
     
@@ -704,13 +709,16 @@ namespace module BattleShip
     @cells   = :Cell?[]
     @n_cells = 0
     
-    property sunken: :bool do get; set; end
-    property hits: :int do get; set; end
-    property grid: :Grid do get; set; end
-    property name: :string do get; set; end
+    attr_accessor sunken: :bool,
+                  hits: :int,
+                  grid: :Grid,
+                  name: :string
     
-    signal hit()
-    signal sunk()
+    signal;
+    def hit(); end
+    
+    signal; 
+    def sunk(); end
 
     
     def initialize()

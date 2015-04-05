@@ -5,6 +5,19 @@ module Q
 
   
   class ValaSourceGenerator < Q::SourceGenerator
+      class ClassScope < Q::Compiler::ClassScope
+        attr_accessor :properties
+        
+        def initialize *o
+          super
+          @properties = {}
+        end
+        
+        def add_property symbol, prop
+          @properties[symbol] = prop
+        end
+      end
+  
       class MethodScope  < Q::Compiler::MethodScope
         def mark_has_match_data bool= true
           @match_data = bool
@@ -75,7 +88,7 @@ module Q
   
     module HasModifiers
       MODIFIERS = [
-        :public, :private, :static, :class, :delegate, :async, :virtual, :override, :abstract
+        :public, :private, :static, :class, :delegate, :async, :virtual, :override, :abstract, :signal
       ]
     
       MODIFIERS.each do |m|
@@ -695,7 +708,7 @@ module Q
       end    
 
       def get_childrens_scope
-        @childs_scope ||= Q::Compiler::ClassScope.new(self)
+        @childs_scope ||= Q::ValaSourceGenerator::ClassScope.new(self)
       end
       
       def build_str ident = 0
@@ -807,7 +820,7 @@ module Q
       end
       
       def get_childrens_scope
-        @childs_scope ||= Q::Compiler::ClassScope.new(self)
+        @childs_scope ||= Q::ValaSourceGenerator::ClassScope.new(self)
       end
       
       def inherits
@@ -989,6 +1002,16 @@ module Q
       
       include DefaultMemberDeclaration
       
+
+      def parented *o
+        q  = super
+        if prop=scope.properties[variable.symbol]
+          type = DeclaredType.new(symbol = variable.symbol, value)
+          prop.default = ((type.array and type.array.length) ? "new #{type.type}[#{type.array.length}]" : "#{value.build_str}")
+          parent.subast.delete(self)
+        end
+        q
+      end
 
       
       def build_str ident = 0
@@ -1694,10 +1717,14 @@ module Q
           bool = true
         end
         
-        "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{rt} #{symbol}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"} {\n" +
+        "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{rt} #{symbol}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"} {\n" +
         write_body(ident) +
         ret +
         "\n#{get_indent(ident)}}"
+      end
+      
+      def signal
+        @modifiers.index(:signal) ? "signal " : ""
       end
       
       def kind
@@ -2294,6 +2321,65 @@ module Q
       end
     end
     
+    module Attribute
+      class Value
+        attr_accessor :default, :set, :get, :construct, :name
+        def initialize v, set = false, get = false, construct = nil
+          @q = v
+          @set = set
+          @get = get
+          @construct = construct
+          @name = v.name
+          
+          if v.array and v.array.length
+            @default = "new #{v.type}[#{v.array.length}]"
+          end
+        end
+        
+        def build_str ident = 0
+          (" "*ident)+ "public #{@q.type}#{@q.array ? "[]" : ""} #{@q.name} {"+
+          "#{@get ? "get;" : ""}"+
+          "#{@set ? "set;" : ""}"+
+          "#{@construct ? "construct;" : ""}"+
+          "#{@default ? "default = #{@default};" : ""}"+
+          "}"
+        end
+      end
+    
+      include HasModifiers
       
+      attr_accessor :set, :get, :construct
+      def initialize *o
+        super
+        @values  = subast[1].subast[0].params.map do |v|
+          Value.new(v,@set, @get, @construct)
+        end
+        
+        mark_semicolon false
+      end
+      
+      def parented *o
+        q=super
+        @values.each do |v|
+          scope.add_property v.name, v
+        end
+        q
+      end
+      
+      def build_str ident = 0
+        @values.map do |v| (" "*ident)+v.build_str end.join("\n")
+      end
+    end
+    
+    class AttrWriter < Base
+      include Attribute
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :attr_accessor
+      end
+      def initialize *o
+        @set = @get = true
+        super        
+      end
+    end  
   end
 end
