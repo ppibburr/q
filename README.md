@@ -52,69 +52,61 @@ require "/some/other.q"
 Sample
 ===
 ```ruby
-class Person < Object
-  # Construction properties
-  property name: :string do
-    get
-    construct
+class Example < Object
+  # static  
+  @@fld = :int
+  @@fld2 = 55
+  
+  # instance
+  @field  = :int
+  @field2 = 6
+
+  # properties: get; set;
+  attr_accessor foo: :int[6], 
+                bar: :string
+  # properties: default = ...              
+  @bar = "fred"
+
+  attr_reader   baz:uint
+  attr_writer   tree:string
+
+  signal;
+  def q(); end
+ 
+  async;
+  def x()
+    # ...
   end
   
-  property age: :int  do
-    get
-    construct set
-  end
-  
-  def self.new(name: :string)
-    Object(name: name)
-  end
-
-  def self.new_with_age(name: :string, years: :int)
-    Object(name: name, age: years);
-  end
-
   def initialize()
-    # do anything else
-    stdout.printf("Happy #{@age}, #{@name}!\n");
+    # constructor
+  end
+  
+  def self.new()
+    # Object(...)
+  end
+  
+  # static
+  def self.quux()
+    # ...
+  end
+  
+  # instance
+  def moof()
+    # ...
+    q()
   end
 end
 
 def main(args: :string[])
-  Person.new_with_age(args[1], :int.parse(args[2]))
+  ex = Example.new()
+  
+  ex.q.connect() do
+    print("moof!\n")
+  end
+  
+  ex.moof()
 end
-```
-
-becomes...  
-
-```vala
-public class Person : Object {
-  public string name {
-    get;
-    construct;
-  }
-
-  public int age {
-    get;
-    construct set;
-  }
-
-  public Person (string name) {
-    Object(name: name);
-  }
-
-  public Person.with_age (string name, int years) {
-    Object(name: name, age: years);
-  }
-
-  construct {
-    stdout.printf(@"Happy $(this.age), $(this.name)\n");
-  }
-}
-
-
-public  void main(string[] args) {
-  new Person.with_age(args[1], int.parse(args[2]));
-}
-
 ```
 
 

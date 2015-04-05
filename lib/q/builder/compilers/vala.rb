@@ -2371,7 +2371,7 @@ module Q
       end
     end
     
-    class AttrWriter < Base
+    class AttrAcessor < Base
       include Attribute
       handles Q::Ast::Command, Command do
         subast[0].symbol.to_sym == :attr_accessor
@@ -2381,5 +2381,27 @@ module Q
         super        
       end
     end  
+    
+    class AttrWriter < Base
+      include Attribute
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :attr_writer
+      end
+      def initialize *o
+        @set = true
+        super        
+      end
+    end 
+    
+    class AttrReader < Base
+      include Attribute
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :attr_reader
+      end
+      def initialize *o
+        @get = true
+        super        
+      end
+    end         
   end
 end
