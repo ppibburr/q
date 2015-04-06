@@ -6,7 +6,7 @@ namespace module BattleShip
     attr_accessor grid: :Grid,
                   game: :Game, 
                   ships_visible: :bool,
-                  ships: :Ship[5]   
+                  ships: :Ship[]   
    
     signal;
     def lost_game(); end
@@ -20,23 +20,23 @@ namespace module BattleShip
     end    
     
     def auto_layout()
-      ships[0] = PatrolBoat.new();
-      ships[1] = Carrier.new();
-      ships[2] = Submarine.new();
-      ships[3] = Destroyer.new();
-      ships[4] = BattleShip.new();     
+      @ships = [
+        PatrolBoat.new(),
+        Carrier.new(),
+        Submarine.new(),
+        Destroyer.new(),
+        BattleShip.new()
+      ]     
     
       @grid.clear()
     
-      for i in 0..4
-        ship = @ships[i]
+      :Ship.in(@ships) do |ship|
         layout(ship)
         
         ship.sunk.connect() do
           c = 0
           
-          for x in 0..4
-            cs = @ships[x]
+          :Ship.in(@ships) do |cs|
             if cs.sunken
               c = c + 1;
             end
@@ -105,8 +105,7 @@ namespace module BattleShip
         end
       end
       
-      for i in 0..cells.length-1
-        c = cells[i]
+      :Cell.in(cells) do |c|
         c.ship = ship
         
         ship.cells = cells
@@ -124,61 +123,23 @@ namespace module BattleShip
   end
   
   class Targeter < Object
-    @axis = 0
-    @direction = 0
+    @axis           = 0
+    @direction      = 0
     @axis_completed = false
-    @reversed = false
-    @flopped = false
+    @reversed       = false
+    @flopped        = false
     
-    @hits    = :Cell[]
-    @n_hits  = 0
+    @hits           = :Cell[]
+    @n_hits         = 0
     
     attr_accessor computer: :Computer,
                   first_hit: :Cell?,
                   last_hit: :Cell?,
                   last_guess: :Cell?
     
-    # signal; 
-    # def sunk_ship(ship: :Ship); end
-    # 
-    # signal; 
-    # def found_target(coords: :Cell[]); end
-    
     def self.new(comp:Computer)
       Object(computer:comp)
-      
-      # sunk_ship.connect() do |ship|
-      #   puts "WAM"
-      #   Gtk.main_quit()
-      #   if did_i_hit_another_ship_also(ship)
-      #     attack_next_ship(ship)
-      #   end
-      # end
     end
-    
-    # def did_i_hit_another_ship_also(ship: :Ship):bool
-    #   if ship.length < @n_hits
-    #     return true
-    #   end
-    #  
-    #   return false
-    # end
-    
-    #def attack_next_ship(ship: :Ship)
-    #  other_hits   = :Cell?[]
-    #  other_hits   = nil
-    #  n_other_hits = 0
-      
-    #  for i in 0..n_hits-1
-    #      n_other_hits = 4
-    #    if hits[i].ship != ship
-    #      `other_hits[n_other_hits] = hits[i];`
-    #      n_other_hits = n_other_hits + 1;
-    #    end
-    #  end
-    #  
-    #  found_target(other_hits)
-    #end
     
     def hit_bound()
       @last_hit = @first_hit
@@ -253,11 +214,13 @@ namespace module BattleShip
       end
     
       @flopped = true
+      
       if @axis == 1
         @axis = 0
       else
         @axis = 1
       end      
+      
       @reversed = false
       @direction = 0
     end
@@ -269,6 +232,7 @@ namespace module BattleShip
       end
     
       @reversed = true
+      
       if @direction == 1
         @direction = 0
       else
@@ -278,13 +242,7 @@ namespace module BattleShip
   end
   
   class Computer < Player
-    attr_accessor targeter: :Targeter #,   
-                  # pending_strike: :bool do get; set; end
-    
-    # @n_strike_targets = 0
-    # @strike_targets   = :Cell?[]
-    
-    
+    attr_accessor targeter: :Targeter
     
     def self.new(game: :Game)                     
       Object(game:game)
@@ -354,67 +312,16 @@ namespace module BattleShip
         if @targeter == nil
           @targeter = Targeter.new(self)
           
-          # @targeter.found_target.connect() do |cells|
-          #   prepare_strike(cells)
-          # end
-          
           @targeter.first_hit = cell
         end
-       
-        # @targeter.n_hits = @targeter.n_hits + 1
        
         @targeter.last_hit = cell
         
         if cell.ship.sunken
-          # @targeter.sunk_ship(cell.ship)
           @targeter = nil
-          
-          # if @pending_strike
-          #   @targeter = Targeter.new(self)
-          #   program_strike()
-          # end
         end
       end 
     end  
-    
-    # def prepare_strike(cells: :Cell[])
-    #   @strike_targets = cells
-    #   @n_strike_targets = cells.length - 1
-    #   @pending_strike = true
-    # end
-    
-    # def program_strike()
-    #   @targeter.last_hit = get_next_strike_target()
-    #   @targeter.first_hit = @targeter.last_hit
-    # end
-    
-    # def get_next_strike_target():Cell?
-    #   cell = :Cell?
-    #   cell = nil
-    #   
-    #   if @n_strike_targets == 0 and @pending_strike
-    #     @pending_strike = false
-    #     @strike_targets = nil
-    #     @n_strike_targets = 0
-    #   
-    #     if @strike_targets[0].ship.sunken
-    #       return nil 
-    #     end
-    #   
-    #     cell = @strike_targets[0]
-    #     
-    #   elsif @pending_strike
-    #     cell = @strike_targets[@strike_targets.length - 1 - @n_strike_targets]
-    #     @n_strike_targets = @n_strike_targets - 1
-    #     
-    #     if cell.ship.sunken
-    #       return get_next_strike_target()
-    #     end
-    #     
-    #   end
-    #   
-    #   return cell
-    # end
   end
   
   class Game < Object
@@ -697,8 +604,10 @@ namespace module BattleShip
         if !@player.game.active
           @player.game.activate()
         end
+        
         @player.game.computer.target()
       end
+      
       return cell
     end
   end
@@ -740,10 +649,10 @@ namespace module BattleShip
         
         puts "#{@name} sunk\n"
         
-        for i in 0..@cells.length-1
-          @cells[i].state = Cell::STATE_SUNK
-          @cells[i].ostate = Cell::STATE_SUNK          
-          @cells[i].render()
+        :Cell.in(@cells) do |c|
+          c.state = Cell::STATE_SUNK
+          c.ostate = Cell::STATE_SUNK          
+          c.render()
         end
       end
     end
@@ -786,8 +695,10 @@ namespace module BattleShip
   
   def self.main(args: :string[])
     Gtk.init(:ref << args)
+    
     win = Window.new()
     win.set_title("Territorial Battle")
+    
     game = Game.new(win)
     
     win.destroy.connect() do

@@ -935,7 +935,7 @@ module Q
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value), ident = 0
       
         scope.append_lvar type.name, type
-        File.open("qqq.txt","a") do |f| f.puts "#{type.name}: #{scope}\n" end
+        
         if type.infered?
           p type
           "var #{variable.symbol} = #{value.build_str(ident).strip}"
@@ -1005,7 +1005,7 @@ module Q
 
       def parented *o
         q  = super
-        if prop=scope.properties[variable.symbol]
+        if scope.is_a?(ClassScope) and (prop=scope.properties[variable.symbol])
           type = DeclaredType.new(symbol = variable.symbol, value)
           prop.default = ((type.array and type.array.length) ? "new #{type.type}[#{type.array.length}]" : "#{value.build_str}")
           parent.subast.delete(self)
@@ -2323,7 +2323,7 @@ module Q
     
     module Attribute
       class Value
-        attr_accessor :default, :set, :get, :construct, :name
+        attr_accessor :default, :set, :get, :construct, :name, :value
         def initialize v, set = false, get = false, construct = nil
           @q = v
           @set = set
@@ -2336,10 +2336,19 @@ module Q
           end
         end
         
+        def declare?
+          @get != "get;" or @set != "set;"
+        end
+        
         def build_str ident = 0
+          s=""
+          if declare?()
+            s=(" "*ident)+ "private #{@q.type}#{@q.array ? "[]" : ""} _#{@q.name};\n" + (" "*ident)
+          end
+          s+
           (" "*ident)+ "public #{@q.type}#{@q.array ? "[]" : ""} #{@q.name} {"+
-          "#{@get ? "get;" : ""}"+
-          "#{@set ? "set;" : ""}"+
+          "#{@get ? "#{@get}" : ""}"+
+          "#{@set ? "#{@set}" : ""}"+
           "#{@construct ? "construct;" : ""}"+
           "#{@default ? "default = #{@default};" : ""}"+
           "}"
@@ -2352,7 +2361,7 @@ module Q
       def initialize *o
         super
         @values  = subast[1].subast[0].params.map do |v|
-          Value.new(v,@set, @get, @construct)
+          Value.new(v,setter(v), getter(v), @construct)
         end
         
         mark_semicolon false
@@ -2368,6 +2377,30 @@ module Q
       
       def build_str ident = 0
         @values.map do |v| (" "*ident)+v.build_str end.join("\n")
+      end
+      
+      def setter(v)
+        if @set and @get
+          return "set;"
+        end
+        
+        if @set
+          return "set { _#{v.name} = value;}"
+        end
+        
+        return ""        
+      end
+      
+      def getter(v)
+        if @set and @get
+          return "get;"
+        end
+        
+        if @get
+          return "get { return this._#{v.name};}"
+        end
+        
+        return ""
       end
     end
     
