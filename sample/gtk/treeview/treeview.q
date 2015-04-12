@@ -1,4 +1,4 @@
-include Gtk;
+using Gtk;
 
 class TreeViewSample < Window
   def initialize()

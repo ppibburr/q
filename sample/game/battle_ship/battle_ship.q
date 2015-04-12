@@ -38,7 +38,7 @@ namespace module BattleShip
           
           :Ship.in(@ships) do |cs|
             if cs.sunken
-              c = c + 1;
+              c += 1
             end
           end
           
@@ -162,21 +162,21 @@ namespace module BattleShip
         
         if @axis == 0
           if @direction == 0
-            x = x + 1
+            x += 1
           end
           
           if @direction == 1
-            x = x - 1
+            x -= 1
           end
         end
         
         if @axis == 1
           if @direction == 0
-            y = y + 1
+            y += 1
           end
           
           if @direction == 1
-            y = y - 1
+            y -= 1
           end
         end      
         
@@ -363,7 +363,7 @@ namespace module BattleShip
 
       @computer.lost_game.connect() do
         message("You win!\n")
-        @wins = @wins + 1
+        @wins += 1
         new_game()
       end
  
@@ -637,7 +637,7 @@ namespace module BattleShip
           return;
         end
         
-        @hits = @hits + 1
+        @hits += 1
         
         if @hits == @length
           self.sunk()

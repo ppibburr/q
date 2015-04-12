@@ -828,7 +828,7 @@ module Q
       register do
         :void_stmt
       end
-    end
+    end   
     
     class For < Event
       include HasArguments

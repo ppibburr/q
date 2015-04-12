@@ -396,13 +396,18 @@ module Q
       
       def build_str ident = 0
         t = get_indent(ident)
-        if (subast[0].symbol.to_sym == :struct or subast[0].symbol.to_sym == :namespace)
+        if (subast[0].symbol.to_sym == :struct or subast[0].symbol.to_sym == :namespace or subast[0].symbol.to_sym == :enum)
           if subast[1]
             q = subast[0].symbol.to_sym  
             (t=subast[1].subast[0])
             if (cb = t.is_a?(Klass)) or t.is_a?(IFace)
               t.set_struct true if cb
-              t.set_namespace true unless cb
+              t.set_namespace true unless cb or subast[0].symbol.to_sym == :enum
+              if subast[0].symbol.to_sym == :enum
+                t.set_enum true 
+                Enum.from(t)  
+              end
+              
               mark_semicolon false
               t.build_str ident
             else
@@ -713,10 +718,15 @@ module Q
       
       def build_str ident = 0
         "#{get_indent(ident)}" +
-        unless namespace?
+        unless namespace? or enum?
           "#{visibility}#{iface_type ? " "+class_type : ""} interface #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"
         else
-          "namespace #{name} {\n"
+          unless enum?
+            "namespace #{name} {\n"
+          else
+            "#{visibility}#{iface_type ? " "+class_type : ""} enum #{name} {\n" +
+            declare_members(ident+2)
+          end
         end +
         write_body(ident)+
         "\n#{get_indent(ident)}}"
@@ -728,6 +738,38 @@ module Q
       
       def namespace?
         !!@namespace
+      end
+      
+      def set_enum bool = true
+        @enum = bool
+      end
+      
+      def enum?
+        !!@enum
+      end      
+    end
+    
+    module Enum
+      attr_accessor :values
+      def self.from t
+        t.extend self
+        t.values = t.subast.find_all() do |x|
+        
+          x.is_a?(VarRef) or (x.is_a?(Assign) and x.subast[0].is_a?(VarField) and x.variable.kind == :constant)
+        
+        end
+        
+        t.values.each do |v| t.subast.delete(v) end
+      end
+     
+      def declare_members ident = 0
+        (" " * ident)+values.map do |x|
+          if x.is_a?(VarRef)
+            x.build_str
+          else
+            x.subast[0].variable.name + " = " + x.value.build_str
+          end
+        end.join(",\n#{" " * ident}") + ";" 
       end
     end
     
@@ -1190,6 +1232,13 @@ module Q
       def initialize *o
         super
         @left, @op, @right = [node.left, node.op, node.right].map do |q| compiler.handle(q) end
+    
+      end
+    
+      def parented *o
+        q = super
+        @right.parented *o
+        q
       end
       
       def build_str ident = 0
@@ -1717,14 +1766,23 @@ module Q
           bool = true
         end
         
-        "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{rt} #{symbol}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"} {\n" +
-        write_body(ident) +
-        ret +
-        "\n#{get_indent(ident)}}"
+        "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{delegate} #{rt} #{symbol}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"}" + 
+        if delegate == "" or "virtual" == kind
+          " {\n" +
+          write_body(ident) +
+          ret +
+          "\n#{get_indent(ident)}}"
+        else
+          ";"
+        end
       end
       
       def signal
         @modifiers.index(:signal) ? "signal " : ""
+      end
+      
+      def delegate
+        @modifiers.index(:delegate) ? "delegate " : ""
       end
       
       def kind
@@ -1734,6 +1792,8 @@ module Q
               return ""
             end
           elsif scope.member.namespace?
+            return ""
+          elsif scope.member.enum?
             return ""
           end
           
@@ -2435,6 +2495,28 @@ module Q
         @get = true
         super        
       end
-    end         
+    end  
+    
+    class Proc < Base
+      handles Q::Ast::MethodAddBlock, MethodAddBlock do
+        begin
+          subast[0].subast[0].subast[0].symbol.to_sym == :proc
+        rescue
+          false
+        end
+      end
+      
+      def initialize *o
+        o[0].instance_variable_set("@arguments",[o[0].subast.last])
+        super *o
+      end
+      
+      
+      def build_str ident = 0
+        subast.map do |c|
+          c.build_str(ident+2)
+        end.join("\n")
+      end
+    end       
   end
 end
