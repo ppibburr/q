@@ -828,7 +828,9 @@ module Q
           write_body(ident)+
           "\n#{get_indent(ident)}}"
         else
-          Q::compile_error self, "Must be Range"
+          "#{get_indent(ident)}foreach (var #{what} in #{self.in.build_str}) {\n" +
+          write_body(ident)+
+          "\n#{get_indent(ident)}}"
         end
       end
     end
