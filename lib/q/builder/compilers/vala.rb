@@ -2123,6 +2123,39 @@ module Q
       end
     end
 
+    class Each < Base
+      handles Q::Ast::MethodAddBlock, MethodAddBlock do
+        next nil if subast[0].is_a?(Q::Ast::MethodAddArg)
+        next nil unless subast[0].is_a?(Q::Ast::Call)  
+        next nil if subast[0].target.subast[0].is_a?(Q::Ast::Dot2)      
+        subast[0].call.symbol.to_s =~ /^each$/
+      end
+      
+      
+      
+      def initialize *o
+        super *o
+        mark_extra_newline true
+        mark_prepend_newline true
+        mark_newline true
+        
+        @what     = compiler.handle(node.subast[0]).target
+        @var_name = compiler.handle(node.subast[1]).params.untyped[0].name
+
+      end
+      
+      def build_str ident = 0
+        get_childrens_scope().append_lvar @var_name.to_sym, DeclaredType.new(@var_name.to_sym, nil)
+        
+        "#{get_indent(ident)}foreach (var #{@var_name} in #{@what.build_str})"+
+        subast[1].build_str(ident).gsub(/^\(.*\=\> \{/, " {")
+      end
+      
+      def get_childrens_scope
+        @childs_scope ||= BlockScope.new(self)
+      end
+    end
+
     class TypedEach < Base
       handles Q::Ast::MethodAddBlock, MethodAddBlock do
         next nil unless subast[0].is_a?(Q::Ast::MethodAddArg)
