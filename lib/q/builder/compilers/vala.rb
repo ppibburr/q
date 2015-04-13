@@ -895,7 +895,7 @@ module Q
       end
       
       def build_str ident = 0
-        get_indent(ident) + @target.build_str + "." + what.symbol
+        get_indent(ident) + @target.build_str + "." + what.symbol.to_s.gsub(/\?$/,'')
       end
     end
     
@@ -2066,7 +2066,7 @@ module Q
       handles Q::Ast::FCall
       
       def build_str ident = 0
-        subast[0].symbol
+        subast[0].symbol.to_s.gsub(/\?$/,'')
       end
     end    
    
