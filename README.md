@@ -2,6 +2,8 @@ Q
 ===
 Ruby Syntax for Vala programming.  
 
+Q is a more of a translator with helpful idioms than a 'compiler'
+
 Read the wiki!
 
 Features
