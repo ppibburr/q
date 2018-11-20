@@ -1,4 +1,3 @@
-
 namespace module BattleShip
   using Gtk
  
@@ -276,7 +275,7 @@ namespace module BattleShip
         @targeter.last_guess = cell
       end      
       
-      if cell.ship.sunken
+      if cell.has_ship() and cell.ship.sunken
         if @targeter != nil
           @targeter.hit_bound() 
         end 
@@ -317,7 +316,7 @@ namespace module BattleShip
        
         @targeter.last_hit = cell
         
-        if cell.ship.sunken
+        if cell.has_ship() && cell.ship.sunken
           @targeter = nil
         end
       end 
@@ -341,12 +340,12 @@ namespace module BattleShip
     signal; 
     def activate(); end
     
-    def self.new(win:Window)
+    def self.new(win:Window)    
+      Object(window:win)
+
       @active = false
       @wins   = 0
       @losts  = 0
-    
-      Object(window:win)
 
       @computer = Computer.new(self)
       @player   = Player.new(self)
@@ -474,7 +473,7 @@ namespace module BattleShip
       elsif @state == Cell::STATE_MISS
         c.parse("rgb(255,255,255)")
       elsif @state == Cell::STATE_SHIP
-        c.parse("rgb(0,255,0)") 
+        c.parse(ship.colour) 
       elsif @state == Cell::STATE_SUNK
         c.parse("rgb(128,25,66)")                   
       end
@@ -516,7 +515,7 @@ namespace module BattleShip
           end
    
           b.clicked.connect() do
-            if b.state == Cell::STATE_SUNK or b.ship.sunken
+            if b.state == Cell::STATE_SUNK or (b.has_ship() && b.ship.sunken)
               
             else
               if b.state != Cell::STATE_HIT
@@ -617,6 +616,7 @@ namespace module BattleShip
     @orient  = :bool
     @cells   = :Cell?[]
     @n_cells = 0
+    @colour  = "rgb(0,255,0)"
     
     attr_accessor sunken: :bool,
                   hits: :int,
@@ -662,6 +662,7 @@ namespace module BattleShip
     def initialize()
       @length = 2
       @name   = "PatrolBoat"
+      @colour = "rgb(255,124,0)"
     end
   end
  
@@ -669,6 +670,7 @@ namespace module BattleShip
     def initialize()
       @length = 3
       @name   = "Destroyer"
+      @colour = "rgb(0,124,124)"      
     end
   end 
   
@@ -676,6 +678,7 @@ namespace module BattleShip
     def initialize()
       @length = 4
       @name   = "Submarine"
+      @colour = "rgb(124,124,0)"
     end
   end
   
@@ -683,6 +686,7 @@ namespace module BattleShip
     def initialize()
       @length = 5
       @name   = "Carrier"
+      @colour = "rgb(124,124,124)"      
     end
   end    
   

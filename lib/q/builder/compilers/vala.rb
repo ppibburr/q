@@ -429,7 +429,7 @@ module Q
         elsif subast[0].symbol.to_sym == :sleep
           "#{t}Thread.usleep((ulong)(#{subast[1].build_str} * 1000 * 1000))"
         elsif subast[0].symbol.to_sym == :puts
-          "#{t}stdout.puts(#{subast[1].build_str}); "        
+          "#{t}stdout.puts(@\"$(#{subast[1].build_str})\"); stdout.putc('\n');"        
         elsif subast[0].symbol.to_sym == :require
           mark_newline false
           mark_extra_newline false
@@ -824,11 +824,11 @@ module Q
         get_childrens_scope().append_lvar what.to_s, DeclaredType.new(what.to_s, @type)
 
         if self.in.is_a?(Q::Range)
-          "#{get_indent(ident)}for (#{@type} #{what} = #{self.in.first}; #{what} <= #{self.in.last}; #{what}++) {\n" +
+          "\n#{get_indent(ident)}for (#{@type} #{what} = #{self.in.first}; #{what} <= #{self.in.last}; #{what}++) {\n" +
           write_body(ident)+
           "\n#{get_indent(ident)}}"
         else
-          "#{get_indent(ident)}foreach (var #{what} in #{self.in.build_str}) {\n" +
+          "\n#{get_indent(ident)}foreach (var #{what} in #{self.in.build_str}) {\n" +
           write_body(ident)+
           "\n#{get_indent(ident)}}"
         end
@@ -986,13 +986,30 @@ module Q
         elsif scope.member.parent.is_a?(PropertyWithBlock)
           "#{variable.symbol} = new #{type.type}[#{type.array.length}]"
         else
-          q = "#{type.build_str}" + 
+          q = "" + 
           if type.array and type.array.length
-            "; #{variable.symbol} = new #{type.type}[#{type.array.length}]"
+             qq=[]
+             if type.array.length > 1
+               i = -1
+               type.array.iter do |v|
+                 i+=1;
+                 if type.array.get_type == 'string'
+                   v = "\"#{v}\""
+                 end
+                 if type.array.get_type == 'char'
+                   v = "'#{v}'"
+                 end
+                 qq << "#{v}" 
+               end
+             
+              "#{type.type}[] #{variable.symbol} = {#{qq.join(", ")}}"
+            else
+              "var #{variable.symbol} = new #{type.type}[#{type.array.length}];"
+            end
           elsif type.nullable?
-            " = null"
+            "#{type.build_str} = null"
           else
-            ""
+            "#{type.build_str}"
           end
         end
       end
@@ -1299,7 +1316,9 @@ module Q
         super
         @of = compiler.handle(node.of)
         begin
-          @length = node.values.subast.map do |n| compiler.handle(n) end[0].node.value if node.values
+          len = node.values.subast.map do |n| compiler.handle(n) end.length
+          return @length = len if len > 1
+          @length = node.values.subast.map do |n| compiler.handle(n) end[0].node.value.to_i if node.values
         rescue
           @length = node.values.subast.map do |n| compiler.handle(n) end[0].symbol if node.values
         end
@@ -1311,6 +1330,10 @@ module Q
       
       def get_type
         of.get_type
+      end
+
+      def iter &b
+        node.values.subast.map do |n| compiler.handle(n).node.value end.each do |q| b.call q end
       end
     end
 
@@ -1601,6 +1624,42 @@ module Q
         super
         @type = :elsif
       end
+    end
+
+    class Unless < Base
+      include HasBody
+      handles Q::Ast::Unless
+      attr_reader :type, :exp, :else
+      def initialize *o
+        super
+        @type = :if
+        @exp = compiler.handle(node.exp)
+        @exp.parented self
+        @else = compiler.handle(node.else) if node.else
+      end
+      
+      def parented *o
+        q = super
+        p self.scope;
+        if @else
+          @else.parented self
+        end
+                @else.scope = self.scope if @else
+        q
+      end
+      
+      def build_str ident = 0
+        
+        if self.class == Q::ValaSourceGenerator::Unless
+          mark_prepend_newline true
+        end
+        
+        (t=get_indent(ident)) +
+        "#{type.to_s.gsub("elsif", "else if")} (!(#{exp.build_str})) {\n"+
+        write_body(ident)+
+        "\n#{t}}" +
+        (self.else ? "\n"+self.else.build_str(ident) : "")
+      end      
     end
     
     class Begin < Base
@@ -2039,6 +2098,10 @@ module Q
         return r
       end
     end
+
+    class BraceBlock < DoBlock;
+      handles Q::Ast::BraceBlock
+    end
     
     class MethodAddArg < Base
       handles Q::Ast::MethodAddArg
@@ -2188,12 +2251,56 @@ module Q
       end
     end
 
+    class Times < Base
+      include HasBody
+      handles Q::Ast::MethodAddBlock, MethodAddBlock do
+        next nil unless subast[0].is_a?(Q::Ast::Call)
+
+        subast[0].call.symbol.to_s =~ /^times/
+      end
+
+      def initialize(*o)
+        super
+        mark_semicolon false
+        mark_newline true
+        mark_extra_newline true
+      end
+      
+      
+      def build_str ident = 0
+        e = For.allocate
+        type = "int"
+        _in = Q::Range.allocate
+        _in.first = 0
+        _in.last = subast[0].target.build_str
+        what = subast[1].params.untyped[0].name
+        s = subast
+        e.instance_exec() do
+          @in = _in
+          @what = what
+          @_subast = s
+          @type = type
+          def self.subast
+            @_subast[1].subast
+          end
+        end
+        e.build_str(ident)
+      end
+    end
+
     class RangeEach < Base
       include HasBody
       handles Q::Ast::MethodAddBlock, MethodAddBlock do
         next nil unless subast[0].is_a?(Q::Ast::Call)
         next nil unless subast[0].target.subast[0].is_a?(Q::Ast::Dot2)
         (subast[0].target.is_a?(Q::Ast::Paren)) and subast[0].call.symbol.to_s =~ /^each/
+      end
+
+      def initialize(*o)
+        super
+        mark_semicolon false
+        mark_newline true
+        mark_extra_newline true
       end
       
       def build_str ident = 0
@@ -2218,7 +2325,7 @@ module Q
             @_subast[1].subast
           end
         end
-        e.build_str(ident)
+        e.build_str(ident).gsub(/\;$/,'')
       end
     end
     
@@ -2530,7 +2637,26 @@ module Q
         @get = true
         super        
       end
-    end  
+    end
+
+    class IfMod < Base
+      handles Q::Ast::IfMod
+      def initialize *o
+        super
+        mark_semicolon false
+        mark_semicolon false
+        mark_newline true
+        mark_extra_newline true
+      end
+      
+      def build_str ident=0
+        "#{i=(" "*ident)}if (#{subast[0].build_str(0)}) {\n"+
+        subast[1..-1].map do |c|
+          c.build_str(ident+2)+";"
+        end.join("\n")+
+        "\n#{i}}"
+      end
+    end       
     
     class Proc < Base
       handles Q::Ast::MethodAddBlock, MethodAddBlock do

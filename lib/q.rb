@@ -1,1 +1,1 @@
-require "q/builder/base"
+require "./lib/q/builder/base"

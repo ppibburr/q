@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 
 
-require 'q'
-require "q/builder/compilers/vala.rb"
+require './lib/q'
+require "./lib/q/builder/compilers/vala.rb"
 
 Q::Ast.compiler_type = Q::ValaSourceGenerator
 

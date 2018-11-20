@@ -372,6 +372,9 @@ module Q
       register do
         :string_literal
       end
+      def value
+        subast[0].subast[0].value
+      end
     end 
     
     class TStringContent < Event
@@ -546,6 +549,9 @@ module Q
       register do
         :bodystmt
       end
+      def children
+        @arguments[0].children
+      end
     end
 
     class Klass < Event
@@ -684,6 +690,12 @@ module Q
         end
       end
     end
+
+    class Unless < If
+      include HasArguments
+      register do :unless end
+      def type; :unless; end
+    end 
     
     class Binary < Event
       include HasArguments
@@ -812,6 +824,13 @@ module Q
       end
     end      
 
+    class IfMod < Event
+      include HasArguments
+      register do
+        :if_mod
+      end
+    end  
+
     class Label < Event
       include HasArguments
       register do
@@ -900,6 +919,7 @@ module Q
       return n
     rescue => e
       puts e
+      puts e.backtrace.join("\n")
       Q.parse_error event,line      
     end
     
