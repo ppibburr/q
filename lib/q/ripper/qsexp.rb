@@ -17,12 +17,26 @@ module Q
     @filename
   end
 
+  DATA = {}
   COMMENTS = []
   COMMENTS_FOR = {}
+
+  def self.filename= f
+    @filename = f
+  end
 
   def self.build(src, filename = '-', lineno = 1)
     Q.src = src
     @filename = filename
+    d = ''
+    q=Ripper.lex(src)
+
+    if q.last[2]=~/__END__/
+      lines = src.split("\n")
+      s=q.last[0][0]+1
+      d = lines[s..-1].join.gsub('"','\"')
+    end
+    DATA[filename] = d
     QSexpBuilder.new(src, filename, lineno).parse
   end
 

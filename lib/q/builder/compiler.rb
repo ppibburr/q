@@ -11,6 +11,7 @@ module Q
 
     class Scope
       attr_reader  :member
+      attr_accessor :in_macro
       
       def initialize member
         @member = member
@@ -25,6 +26,17 @@ module Q
         @n ||= 0
         @n += 1
         "_q_local_#{@n}"
+      end
+
+      def sym
+        s=[member.name] rescue []
+        q=member
+        while q and q.scope
+          q = q.parent
+          s << "#{q.name}" rescue ''
+        end
+    
+        s.reverse.join("::")
       end
       
       def until_nil &b
@@ -133,7 +145,14 @@ module Q
       end
       
       def self.handles what, *overides, &b
-        (compiler.handlers[what] ||= []) << Handles::Handler.new(self,what, *overides, &b)
+        unless what.is_a?(Array)
+          (compiler.handlers[what] ||= []) << Handles::Handler.new(self,what, *overides, &b)
+          return
+        end
+
+        what.each do |q|
+        (compiler.handlers[q] ||= []) << Handles::Handler.new(self,q, *overides, &b)
+        end
       end
     end
   
@@ -171,7 +190,9 @@ module Q
     rescue => e
       if !bool
         puts e
-        Q.parse_error node.event, node.line
+        e.backtrace.each do |l| puts l end
+        ev = node.event rescue "none #{node} #{node.class}"
+        Q.parse_error ev, node.line
       end
       raise e    
     end

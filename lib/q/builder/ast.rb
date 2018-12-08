@@ -10,11 +10,11 @@ module Q
       end.first
       
       if q
-        puts "Have #{q[0]}"
+        puts "Have #{q[0]}" if $LA
         return q[0]
       end
       
-      puts "TODO: Unhandled #{event} #{foo}"
+      puts "TODO: Unhandled #{event} #{foo}" if $LA
       
       return nil
     end
@@ -365,6 +365,13 @@ module Q
       register do
         :string_content
       end
+
+      def name
+      p self
+        "\"#{arguments[0].value}\"}"
+      rescue
+        "\"\""
+      end
     end
     
     class StringLiteral < Event
@@ -474,6 +481,9 @@ module Q
         @value = o[0]
         super event, line
         @type = event.to_s.gsub("@",'').to_sym
+        #if @value =~ /^\-[0-9]/ and @value !~ /\./
+        #  @type = :int
+        #end
       end
     end
 
@@ -592,6 +602,22 @@ module Q
         @call = subast.shift
       end
       
+    end
+
+    class CommandCall < Event
+      include HasArguments
+      register do
+        :command_call
+      end
+
+      attr_reader :call, :q, :target
+      def initialize *o
+        super
+        p @target = subast.shift
+        p @q = subast.shift
+        p @call = subast.shift
+
+      end
     end
 
     class ARef < Event
@@ -748,6 +774,20 @@ module Q
       def initialize *o
         super
         @value = arguments.pop.symbol
+      end
+    end
+
+    class DynaSymbol < Event
+      include HasArguments
+
+      register do
+        :dyna_symbol
+      end
+      attr_reader :value
+      def initialize *o
+        super
+
+        @value = arguments.pop.children[0].value.to_sym
       end
     end
 

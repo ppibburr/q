@@ -550,7 +550,7 @@ namespace module BattleShip
     def clear()
       for y in 0..9
         for x in 0..9
-          cell = (:Cell << find_cell(x,y))
+          cell = :Cell << find_cell(x,y)
           cell.state = 0
           cell.ostate = 0 
           cell.ship = nil

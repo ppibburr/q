@@ -1,8 +1,17 @@
 $: << File.dirname(__FILE__)
 require "source_generator"
 
-module Q
+def add_package p
+  $V_ARGV << "--pkg #{p}" unless $V_ARGV.index("--pkg #{p}")
+end
 
+module Q
+  module ResolvesAsMacro
+    def is_macro?
+      ValaSourceGenerator::Command::MACROS[symbol] || ValaSourceGenerator::Command::MACROS[scope.sym.split("::").join(".")+"."+symbol]
+    rescue
+    end
+  end
   
   class ValaSourceGenerator < Q::SourceGenerator
       class ClassScope < Q::Compiler::ClassScope
@@ -88,13 +97,16 @@ module Q
   
     module HasModifiers
       MODIFIERS = [
-        :public, :private, :static, :class, :delegate, :async, :virtual, :override, :abstract, :signal
+        :public, :private, :static, :class, :delegate, :async, :virtual, :override, :abstract, :signal,:macro
       ]
     
       MODIFIERS.each do |m|
         define_method :"#{m}?" do
           @modifiers.index(m)
         end
+
+        def is_macro?; macro?;end
+        attr_accessor :q_macro
         
         define_method :"set_#{m}" do |bool=true|
           if bool
@@ -108,6 +120,31 @@ module Q
       def apply_modifier m
         send :"set_#{m.name}"
       end
+
+      def macro_vcall n
+        if n=~/^\%/
+         # md = (macro_declares[n] ||= n)
+        end
+      
+        md=macro_declares[n] 
+        
+        if !md
+          i=-1
+
+          ss = q_macro
+          f=''
+          if params.untyped.find do |pp| i+=1;(f=pp.name) == n end
+          p Y: symbol, F: f, MD: md = macro_declares[n] ||= "%v#{i+1}_#{ss}"
+            macro_declares[md] = md
+            p TT: n,MD: md if f=="ba"
+          else
+
+            md = macro_declares[n] ||= "%rav#{macro_declares.keys.length}_#{q_macro}"
+            macro_declares[macro_declares[n]] = macro_declares[n]
+          end
+        end
+        md
+      end
       
       def initialize *o
         super
@@ -115,7 +152,12 @@ module Q
       end
     end
     
-    
+    class Statements < Base
+      handles Q::Ast::Statements
+      def build_str
+        subast.map do |i| i.build_str end.join(", ")
+      end
+    end
     
     module DefaultMemberDeclaration
       include HasModifiers
@@ -164,9 +206,12 @@ module Q
             end
             hc = true
           end
+
+          str = c.build_str(ident+2)
+          str = "" if ["\n", ";", ";\n", ""].index str.strip
           (c.marked_prepend_newline? ? "\n" : "") +
-          c.build_str(ident+2) +
-          (c.marked_semicolon? ? ";" : "") +
+          str +
+          ((c.marked_semicolon? and str != "") ? ";" : "") +
           (c.marked_newline? ? "\n" : "") +
           (c.marked_extra_newline? ? "\n" : "") +
           (hc ? write_comment(c.node.line,0).gsub(/\n$/,'') + s : "") +
@@ -176,7 +221,6 @@ module Q
                 s = ""       
         
         if [Q::ValaSourceGenerator::Def, Q::ValaSourceGenerator::Singleton].index(self.class)
-
           if get_childrens_scope.marked_match_data?
             s += "#{t=get_indent(ident+2)}string?[] _q_local_scope_empty_str_array = new string[0];\n" + 
             "#{t}MatchInfo _q_local_scope_match_data = null;\n"
@@ -246,8 +290,14 @@ module Q
       
       def build_str ident = 0
         mark_semicolon false
-        get_indent(ident) + subast[0].value.gsub(/^"/,'').gsub(/"$/,'')
-      end 
+        get_indent(ident) + subast.map do |q|
+          q.build_str.gsub(/^"/,'').gsub(/"$/,'')
+        end.join
+      end
+
+      def mark_template b=true
+
+      end
     end
     
     
@@ -263,6 +313,7 @@ module Q
     end
     
     class VarRef < Base
+      include ResolvesAsMacro
       handles Q::Ast::VarRef
 
       def variable
@@ -278,13 +329,40 @@ module Q
       end
       
       def symbol
+      p = self
+
+        while p=p.parent
+          if p.is_a?(HasModifiers)
+            if p.macro?
+        
+              unless kind == :global or kind == :constant
+                
+                return p.macro_vcall(variable.symbol) unless kind == :global or variable.is_a?(KeyWord)
+              end
+              break
+             # return "MANGLED_#{variable.symbol}"
+            end
+          end
+        end
+
+        if scope and scope.member.is_a?(HasModifiers) and scope.member.is_macro?
+          return "#{scope.member.q_macro}_q_macro_arg_"+variable.symbol.to_s+"_eqma" unless kind == :global or kind == :constant or variable.is_a?(KeyWord)
+        end
+        case variable.symbol.to_s
+        when "M"
+        #if symbol.to_s == "M"
+          return "%n_args"
+        #end
+        when "CWD"
+          return "GLib.Environment.get_current_dir()"
+        end
         variable.symbol
       end
       
       def build_str ident = 0
         if kind == :global and symbol.to_s == "~"
           scope.until_nil do |q|
-            if q.member.is_a?(Def)
+            if q.is_a?(MethodScope)
               q.mark_has_match_data true
               break
             end
@@ -293,14 +371,18 @@ module Q
           return get_indent(ident) + "(((#{get_match_data_variable} != null) && (#{get_match_data_variable}.fetch_all() != null)) ? #{get_match_data_variable}.fetch_all() : _q_local_scope_empty_str_array)"
         elsif kind == :global and symbol.to_s == "?"
           scope.until_nil do |q|
-            if q.member.is_a?(Def)
+            if q.is_a?(MethodScope)
               q.mark_has_process_exit_status true
               break
             end
           end        
           return get_indent(ident) + "Process.exit_status(_q_local_scope_process_exit_status)"
+        elsif kind == :global and symbol.to_s == "$"
+          return get_indent(ident) + "(uint)Posix.getpid()"
+        elsif m=is_macro?
+          return m.perform(0, nil)
         end  
-        
+
         get_indent(ident) + "#{kind == :instance ? "this." : ""}#{symbol.to_s}"
       end
     end
@@ -378,7 +460,6 @@ module Q
       end
       
       def build_str ident = 0
-      p [parent.parent.parent.parent.parent.parent, :PARENT]
         if !parent.parent.parent.parent.parent.parent.is_a?(Delegate) and !parent.parent.parent.parent.parent.is_a?(Signal)
           params.map do |p|
             p.name.to_s + ": " + p.type.to_s
@@ -390,8 +471,214 @@ module Q
         end
       end
     end
+
+    
     
     class Command < Base
+      class Macro
+        def initialize body,m=nil
+          @body = body
+          @m = m
+        end
+
+        def symbol
+          (MACROS.find do |n,m| m == self end[0]).gsub(".", '__')
+        end
+
+        def v_name pct_var
+          vn = "pct_#{pct_var.gsub("%",'')}"
+          if @m
+            if q=@m.macro_declares.find do |k,v| v == pct_var and k != pct_var end
+              vn += "_#{q[0]}"
+            end
+          end
+          n = @m ? vn : ""
+        end
+
+        attr_reader :rval
+        def perform ident, args
+          vars = {}
+
+          if args.is_a?(ArgParen)
+            args = args.subast[0]
+            args = args.subast if args and args.subast.is_a?(ArgsAddBlock)
+          end
+          
+          s=@body.strip
+          @body = @body + ";" if s =~ /\n/
+
+          s= @body.split("\n").map do |l|
+            (" "*ident)+l
+          end.join("\n")
+
+          ms = symbol.split("__")
+          ms = ms[0..-2].join("::")+".#{ms[-1]}"
+          s=(" "*ident)+"/** Q Macro: #{ms} **/"+s+" /** END_Q **/" if $CM
+
+          STDOUT.puts "MACRO: template\n#{s}" if $LMACRO
+
+          s=s.gsub(/\%n_args/, args ? args.subast.length.to_s : '0')
+
+          if s =~ /\%qva/
+          ma = "\n// Q Macro Value[]\n//\n#{" "*ident}Value[] #{qva="_q#{Macro.next_var_name}_#{symbol}_qmva"}={};\n"+args.subast.map do |qqq|
+            "#{" "*ident}Value #{qv="_q#{Macro.next_var_name}_#{symbol}_qmv"} ="+qqq.build_str+";\n\n"+
+            "#{" "*ident}#{qva} += #{qv};\n"
+          end.join()
+            p MA: s=ma+"\n\n"+s
+            s=s.gsub("%qva", qva)
+          end
+
+          if s =~ /\%argv_s/
+          ma = "{"+args.subast.map do |qqq|
+            qqq.build_str
+          end.join(",")+"}"
+            s=s.gsub("%argv_s", ma)
+          end          
+          
+          while s =~ /\%v([0-9+])_#{symbol}/
+            m1=$1
+p s
+            v = args.subast[i=$1.to_i-1].build_str
+            p VS: bs=v, m: m1, a: args.subast[i=$1.to_i-1]
+            v = args.subast[i].node.arguments[0].name rescue 'void' if v =~ /^\%v([0-9+])/
+            v=bs if v==""
+            v = "void" if args.subast[i=m1.to_i-1] == nil
+            p = args.subast[i] if args
+            while p and p=p.parent
+              if p.is_a?(HasModifiers) and p.macro?
+                ov=v
+                v = p.macro_declares[v]
+                v=ov unless v
+
+                om=true
+                break
+              end
+            end
+
+
+            v = 'null' if v==''
+            v = '' if v.strip == 'void'
+            
+            s = s.gsub("%v"+m1+"_#{symbol}", v)
+          end
+
+          while s =~ /\%rav([0-9]+)_#{symbol}/
+            s = s.gsub(q="%rav"+$1+"_#{symbol}", (vars[q] ||= (Macro.next_var_name+"_#{symbol}_#{v_name(q)}")))
+          end
+
+          if s =~ /\%return (.*)/
+            @rval = $1
+            s=s.gsub("%return #{rval}",'')
+          end
+
+          s=s.gsub(" = ;", " = null;")
+
+          STDOUT.puts "MACRO: expanded\n#{s}" if $LMACRO
+          s
+        end
+
+        @id=-1
+        def self.next_var_name
+          "_q#{@id+=1}_"
+        end
+
+        def self.from_def(m,args, body)
+          ins = allocate
+          p m.q_macro, m.symbol
+          args=args.reverse
+          var_i = 0
+          lv=[]
+  
+          while body =~ /q_macro_arg_(.*?)_eqma/
+          lv << $1 unless lv.index($1)
+            begin
+            p Y: $1
+              i=args.index($1)+1
+              pct = "%v#{i}_#{symbol}"
+              a=$1
+              lv.delete $1
+            rescue
+              var_i = lv.index($1)
+              pct = "%rav#{var_i}_#{symbol}"
+              m.macro_declares[$1]||=pct
+              a = $1
+            end 
+            body=body.gsub("#{symbol}_q_macro_arg_#{a}_eqma", pct)
+          end
+          ins.send(:initialize,body.strip.gsub(/\;$/,'').gsub(/\n/,";\n"),m)
+          def ins.perform(ident, args)
+            super
+          end
+        
+          ins
+        end
+      end
+      
+      MACROS = {:'__FILE__' => fm=Macro.new(''), 'DATA' => dm=Macro.new(''), 'Q.Process.pid' => pid=Macro.new('(uint64)Posix.getpid()')}
+      def pid.perform *o
+        add_package "posix"
+        super
+      end
+      
+      def fm.perform ident, q
+        "\"#{Q.filename}\""
+      end
+
+      def dm.perform ident, q
+        "\"#{Q::DATA[Q.filename]}\""
+      end
+
+      mm=MACROS['Q.get_macros'] = Macro.new('')
+      def mm.perform(ident, ast)
+        @body="string[] %rav1_Q__get_macros;
+        %rav1_Q__get_macros = {#{MACROS.keys.map do |k| "\"#{k}\"" end.join(',')}};
+        %return %rav1_Q__get_macros
+        "
+        super
+      end
+
+      pm=MACROS['Q.package'] = Macro.new('')
+      def pm.perform(ident, ast)
+        ast=ast.subast[0].subast;
+     
+        pkgs = ast.map do |q|
+          add_package q.value
+        end
+        @body = ''
+        super ident, nil
+      end
+       
+      em=MACROS['Q.eval'] = Macro.new('')
+      def em.perform(ident, ast)
+        ast=ast.subast[0].subast;
+       
+        t = ast[0]
+      
+        case t.value
+        when "string"
+          @body="\"#{eval ast[1].node.value}\""
+        when "string[]"
+          a=eval(ast[1].node.value)
+          @body="{#{a.map do |q| "\"#{q}\"" end.join(", ")}}"
+        when /(\[\])$/
+          @body="{#{eval(ast[1].node.value).join(", ")}}"        
+        else
+          @body="#{eval ast[1].node.value}"
+        end
+        super ident, nil
+      end
+
+      Dir.glob("#{File.join(File.dirname(__FILE__),"..","..")}/*.vala.macro").each do |f|
+        n=File.basename(f).split(".")[0..-2]
+        MACROS[n.join(".")] = Macro.new(open(f).read)
+      end
+
+      Dir.glob("./*.vala.macro").each do |f|
+        n=File.basename(f).split(".")[0]
+        MACROS[n] = Macro.new(open(f).read)
+      end
+
+      include ResolvesAsMacro
       handles Q::Ast::Command
       
       def build_str ident = 0
@@ -419,7 +706,7 @@ module Q
           
         elsif subast[0].symbol.to_sym == :system
           scope.until_nil do |q|
-            if q.member.is_a?(Def)
+            if q.is_a?(MethodScope)
               q.mark_has_process_exit_status true
               break
             end
@@ -429,19 +716,36 @@ module Q
         elsif subast[0].symbol.to_sym == :sleep
           "#{t}Thread.usleep((ulong)(#{subast[1].build_str} * 1000 * 1000))"
         elsif subast[0].symbol.to_sym == :puts
-          "#{t}stdout.puts(@\"$(#{subast[1].build_str})\"); stdout.putc('\n');"        
+          "#{t}stdout.puts((#{subast[1].build_str}).to_string()); stdout.putc('\\n');"        
         elsif subast[0].symbol.to_sym == :require
           mark_newline false
           mark_extra_newline false
           mark_prepend_newline false
           mark_semicolon false
           "" 
+        
+        elsif (s=subast[0].symbol) == "construct"
+          "#{t}#{s} #{subast[1].build_str}"
+
+
+        elsif (s=subast[0].symbol) == "out"
+          mark_semicolon false
+          "out #{subast[1].build_str}".gsub(/^\(/,'').gsub(/\)$/,'')
+        elsif (s=subast[0].symbol) == "macro"
+          mark_semicolon false
+          n=scope.sym.split("::").join('.')+"."+subast[1].subast.shift.build_str rescue subast[1].subast.shift.build_str
+          MACROS[n] = Macro.new(subast[1].subast[0].node.value)
+          ''
+        elsif macro = MACROS[subast[0].symbol]
+          mark_semicolon false
+          macro.perform(ident, subast[1])
         elsif (s=subast[0].symbol) != "construct"
           "#{t}#{s}(#{subast[1].build_str})"
-        
-        else
-          "#{t}#{s} #{subast[1].build_str}"
         end
+      end
+
+      def is_macro?
+        MACROS[subast[0].symbol]
       end
     end
     
@@ -639,7 +943,7 @@ module Q
       
       def initialize *o
         super
-        @interfaces = subast[1].subast.map do |q| q.symbol end
+        @interfaces = subast[1].subast.map do |q| q.build_str end
       end
       
       
@@ -653,7 +957,7 @@ module Q
     end
 
     module IFace
-      attr_reader :name, :includes, :generics    
+      attr_reader :name, :includes, :generics , :macros  
       include HasBody
       include DefaultMemberDeclaration      
       
@@ -664,8 +968,13 @@ module Q
     
       def append_includes member
         member.interfaces.each do |i|
+
           next if includes.index(i)
-          includes << i
+          if i.to_s == "Q.Macros"
+            @macros = true
+          else
+            includes << i
+          end
         end
         subast.delete member
       end
@@ -717,7 +1026,8 @@ module Q
       end
       
       def build_str ident = 0
-        "#{get_indent(ident)}" +
+
+        s="#{get_indent(ident)}" +
         unless namespace? or enum?
           "#{visibility}#{iface_type ? " "+class_type : ""} interface #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"
         else
@@ -730,6 +1040,12 @@ module Q
         end +
         write_body(ident)+
         "\n#{get_indent(ident)}}"
+
+        if !@macros
+          s
+        else
+          ''
+        end
       end
       
       def set_namespace bool = true
@@ -821,6 +1137,19 @@ module Q
       end
       
       def build_str ident = 0
+        p = self
+        what = self.what
+        while p = p.parent
+          if p.is_a?(HasModifiers) and p.macro?
+
+            n = what
+            what = (p.macro_vcall(what))
+            p wn: n, w: what
+            p.macro_declares[n] = what
+            p.macro_declares[what] = what
+            break
+          end
+        end
         get_childrens_scope().append_lvar what.to_s, DeclaredType.new(what.to_s, @type)
 
         if self.in.is_a?(Q::Range)
@@ -882,7 +1211,7 @@ module Q
       
       def build_str ident = 0
         "#{get_indent(ident)}#{visibility}#{iface_type ? " "+class_type : ""} #{struct? ? "struct" : "class"} #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"+
-        write_body(ident)+
+        write_body(ident).strip+
         "\n#{get_indent(ident)}}"
       end
     end
@@ -895,10 +1224,88 @@ module Q
        @target = compiler.handle(node.target)
        @what = compiler.handle(node.call)
       end
+
+      def is_macro?; nil; end
+
+      def is_type?
+        return true if node.target.is_a? Q::Ast::SymbolLiteral
+        return true if node.target.is_a? Q::Ast::DynaSymbol
+        return true if @target.is_a?(Q::ValaSourceGenerator::Type)
+        false
+      end
       
       def build_str ident = 0
-        get_indent(ident) + @target.build_str + "." + what.symbol.to_s.gsub(/\?$/,'')
+        if !is_type?
+         p = self
+         str = @target.build_str
+         while p = p.parent
+           if p.is_a?(HasModifiers)
+             if p.macro?
+               str=p.macro_declares[str=@target.build_str] || str
+               break
+             end
+           end
+         end
+
+          s=get_indent(ident) + str + "." + what.symbol.to_s
+          s=s.gsub(/\?$/,'')
+        else
+          case @target.build_str
+          when /out|ref/
+            res = what.symbol.to_s
+            p = self
+            while p and p=p.parent
+              if p.is_a?(HasModifiers) and p.macro?
+                res = p.macro_vcall(res)
+                break
+              end
+            end
+            s=get_indent(ident) + @target.build_str + " " + res
+          when /string|int|char|uint/
+            s=get_indent(ident) + "(#{@target.build_str})" + "" + what.symbol.to_s
+         
+          else
+            if is_type?
+              s=get_indent(ident) + "(#{@target.build_str})" + "" + what.symbol.to_s
+            else
+              s=get_indent(ident) + @target.build_str + "." + what.symbol.to_s
+            end
+          end
+        end
+        s
       end
+    end
+
+    class CommandCall < Call
+      handles Q::Ast::CommandCall
+      def initialize *o
+        super
+        @arguments = compiler.handle(node.arguments[0])
+      end
+
+      def is_macro?
+        Command::MACROS[@target.build_str+"."+what.symbol.to_s]
+      end
+      
+      def build_str ident = 0
+        if m=is_macro?
+          return m.perform(ident, @arguments)
+        end
+        
+        if !is_type?
+          s=get_indent(ident) + @target.build_str + "." + what.symbol.to_s
+          s=s.gsub(/\?$/,'')
+        else
+        p cc: what.symbol.to_s
+        #  case what.symbol.to_s
+      #    when "index"
+       #     s = Command::MACROS['Q.Iterable.find'].perform ident, subast
+         # else
+            s=get_indent(ident) + @target.build_str + "." + what.symbol.to_s
+         # end
+        end
+        s
+      end   
     end
     
     class ZSuper < Base
@@ -934,7 +1341,7 @@ module Q
       def build_str ident = 0
         subast.map do |c|
           c.parented self;
-          (c.node.flags[:type] ? "typeof (#{c.build_str }#{c.is_a?(ArrayDeclaration) ? "[]" : ""})" : "#{c.build_str }")
+          (c.node.flags[:type] ? "#{c.build_str }#{c.is_a?(ArrayDeclaration) ? "[]" : ""}" : "#{c.build_str }")
         end.join(", ")
       end
     end
@@ -955,41 +1362,115 @@ module Q
       end
       
       def assign_local ident=0
-        
+        def variable.symbol
+          @q||={}
+          if m=is_macro?
+           
+            @q[m] ||= m.macro_vcall(super)
+
+            @sym ||= @q[m]
+            m.macro_declares[super] = @sym
+            m.macro_declares[@sym] = @sym
+            return @sym
+          end
+          super
+        end
+
+        def variable.is_macro?
+          @is_macro
+        end
+p = self
+while p and p = p.parent
+  break if p.is_a?(HasModifiers)
+end
+        variable.instance_variable_set("@is_macro", p) if p and p.macro?
+
       
         Q::compile_error(self,"Cant assign local variable in #{scope.class}") unless scope and ![Q::Compiler::ClassScope].index(scope)
 
-        if scope.declared?(variable.symbol)
-          type = scope.get_lvar_type(variable.symbol)
+        if scope.declared?(variable.symbol) #or variable.symbol =~ /\%/
+          type = scope.get_lvar_type(variable.symbol) rescue :infered
         else
           # warn declaration by infered type
-          p value, :VAL
-          if type = DeclaredType.new(variable.symbol, value) and !type.infered?
-            return declare_field(type)+ "; " + assign_local
+          if type = DeclaredType.new(variable.symbol, value) and !type.infered? and !((value.is_a?(MethodAddArg) or value.is_a?(Call) or value.is_a?(VCall) or value.is_a?(VarRef)) and value.is_macro?)
+            bool = value.build_str == type.type
+         
+            return declare_field(type)+ "; " + (bool ? '' : assign_local)
           elsif !subast[0].is_a?(ARefField)
             return declare_field(DeclaredType.new(variable.symbol, nil), ident)
           end
         end
  
         _new = ""
-        
+        if (value.is_a?(Command) or value.is_a?(VCall) or value.is_a?(VarRef) or value.is_a?(Call) or value.is_a?(MethodAddArg)) and m=value.is_macro?
+                      vs = value.build_str
+                      if m.rval
+                    
+                        return vs+"\n#{variable.symbol} = #{m.rval};"
+                      else
+                        return "#{variable.symbol} = #{vs};"
+                      end
+        end
         "#{variable.symbol}#{do_sets_field} = #{_new}#{value.build_str(ident).strip}"
       end
       
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value), ident = 0
-      
+        def variable.symbol
+          @q||={}
+          if m=is_macro?
+           
+            @q[m] ||= m.macro_declares.keys.index(super) || m.macro_declares.keys.length
+
+             @sym ||= "%rav#{@q[m]}_#{m.q_macro}"
+              m.macro_declares[super] ||= @sym
+              m.macro_declares[@sym] ||= @sym
+              return @sym
+          end
+          super
+        end
+
+        def variable.is_macro?
+          @is_macro
+        end
+p = self
+while p and p = p.parent
+  break if p.is_a?(HasModifiers)
+end
+        variable.instance_variable_set("@is_macro", p) if p and p.macro?
+
         scope.append_lvar type.name, type
         
-        if type.infered?
-          p type
-          "var #{variable.symbol} = #{value.build_str(ident).strip}"
+        if type.infered? and value.build_str !~ /^\((.*)\)[a-zA-Z0-9]/
+          qqq = ""
+          if (value.is_a?(Command) or value.is_a?(VCall) or value.is_a?(VarRef) or value.is_a?(MethodAddArg)) and m=value.is_macro?
+            qqq << "#{value.build_str(ident).strip}\n#{(" ")*ident}"
+            if m.rval
+      
+              val_str = m.rval 
+            else
+
+              val_str = value.build_str(ident).strip
+              qqq = ""
+            end
+          else
+            val_str = value.build_str(ident).strip
+          end
+
+          if val_str.strip == ""
+            "var #{variable.symbol} = #{qqq}"
+          else
+            "#{qqq}var #{variable.symbol} = #{val_str}"
+          end
+        elsif type.infered? and value.build_str =~ /^\((.*)\)[a-zA-Z0-9]/
+          n=value.node
+          "#{$1} #{variable.symbol} = #{value.build_str}"
         elsif scope.member.parent.is_a?(PropertyWithBlock)
           "#{variable.symbol} = new #{type.type}[#{type.array.length}]"
         else
           q = "" + 
           if type.array and type.array.length
              qq=[]
-             if type.array.length > 1
+             if type.array.initializer? and type.array.length > 1
                i = -1
                type.array.iter do |v|
                  i+=1;
@@ -1001,7 +1482,7 @@ module Q
                  end
                  qq << "#{v}" 
                end
-             
+          
               "#{type.type}[] #{variable.symbol} = {#{qq.join(", ")}}"
             else
               "var #{variable.symbol} = new #{type.type}[#{type.array.length}];"
@@ -1009,7 +1490,7 @@ module Q
           elsif type.nullable?
             "#{type.build_str} = null"
           else
-            "#{type.build_str}"
+            "#{type.build_str(0,self)}"
           end
         end
       end
@@ -1185,9 +1666,10 @@ module Q
     class Type < Base
       FLAG = :type
       include Q::Compiler::KnownType
-      handles Q::Ast::SymbolLiteral
+      handles [Q::Ast::DynaSymbol, Q::Ast::SymbolLiteral]
       
-      def value
+      def value;
+        return node.value.to_s if !subast[0]
         subast[0].symbol
       end
       
@@ -1261,8 +1743,17 @@ module Q
       end
       
       def build_str ident = 0
+        p=self
         if left.is_a?(VarField)
-          l = left.variable.symbol
+          while p=p.parent
+            if p.is_a?(HasModifiers)
+              if p.macro?
+                l= (p.macro_declares[left.variable.symbol] ||= p.macro_vcall left.variable.symbol)
+              end
+            end
+          end
+      
+          l = left.variable.symbol unless l
         else
           l = left.build_str
         end
@@ -1335,6 +1826,10 @@ module Q
       def iter &b
         node.values.subast.map do |n| compiler.handle(n).node.value end.each do |q| b.call q end
       end
+
+      def initializer?
+        node.values.subast.length > 1
+      end
     end
 
     module GenericsType
@@ -1387,11 +1882,32 @@ module Q
       end
       
       def symbol
+        p = self
+        while p=p.parent
+          if p.is_a?(HasModifiers)
+            if p.macro?
+            p UU: subast[0].symbol, MD: md = p.macro_vcall(subast[0].symbol)
+              return md
+            end
+          end
+        end
         subast[0].symbol
       end
       
       def build_str ident = 0
-        get_indent(ident) + subast[0].symbol
+        if !m=is_macro?
+
+          return get_indent(ident) + symbol
+        end
+
+        return m.perform(ident,nil) 
+      end
+
+      def is_macro?
+    
+        return Command::MACROS[subast[0].symbol] if Q::ValaSourceGenerator::Variable
+
+        Command::MACROS[subast[0].build_str] || Command::MACROS[scope.sym.split("::").join(".")+"."+subast[0].build_str]
       end
     end
     
@@ -1431,17 +1947,27 @@ module Q
       
       def build_str ident = 0
         raise "only backrefs should be here" unless node.kind == :backref or node.kind == :global 
+        if symbol.to_s == "$"
+          return get_indent(ident) + "Posix.getpid()"
+        end
+
+        case symbol.to_s
+        when "M"
+          return get_indent(ident) + "%n_args"
+        when "CWD"
+          GLib::Environment.get_current_dir()
+        end
         
         if symbol.to_s =~ /^[0-9]+/
           scope.until_nil do |q|
-            if q.member.is_a?(Def)
+            if q.is_a?(MethodScope)
               q.mark_has_match_data true
               break
             end
           end
                   
           "(#{get_match_data_variable} != null ? #{get_match_data_variable}.fetch("+symbol.to_s.gsub(/^$/, '')+") : _q_local_scope_empty_str_array[0])"
-
+        
         else
           raise "Bad value!"
         end
@@ -1574,7 +2100,7 @@ module Q
       end 
       
       def value
-        p node.value
+        node.value
       end
       
       def build_str ident = 0
@@ -1596,11 +2122,13 @@ module Q
       
       def parented *o
         q = super
-        p self.scope;
+     
         if @else
           @else.parented self
         end
-                @else.scope = self.scope if @else
+        
+        @else.scope = self.scope if @else
+
         q
       end
       
@@ -1614,7 +2142,7 @@ module Q
         "#{type.to_s.gsub("elsif", "else if")} (#{exp.build_str}) {\n"+
         write_body(ident)+
         "\n#{t}}" +
-        (self.else ? "\n"+self.else.build_str(ident) : "")
+        (self.else ? ""+self.else.build_str(ident) : "")
       end      
     end
     
@@ -1640,11 +2168,11 @@ module Q
       
       def parented *o
         q = super
-        p self.scope;
+
         if @else
           @else.parented self
         end
-                @else.scope = self.scope if @else
+        @else.scope = self.scope if @else
         q
       end
       
@@ -1704,7 +2232,6 @@ module Q
       end
       
       def build_str ident = 0
-        p variable
         "#{t=get_indent(ident)}catch (#{what ? what.build_str() : "Error"} #{variable ? variable.variable.symbol : "_q_local_err"}) {\n"+
         write_body(ident) + 
         "#{next_rescue ? "\n#{t}} "+next_rescue.build_str(ident) : ""}"
@@ -1750,8 +2277,11 @@ module Q
       end
       
       def build_str ident = 0
+        s = exp.build_str
+        s << " != null" unless exp.is_a?(Binary)
+
         (t=get_indent(ident)) +
-        "while (#{exp.build_str}) {\n"+
+        "while (#{s}) {\n"+
         write_body(ident)+
         "\n#{t}}"
       end
@@ -1762,10 +2292,10 @@ module Q
       include DefaultMemberDeclaration
       handles Q::Ast::Def
 
-      attr_reader :params, :return_type
+      attr_reader :params, :return_type, :macro_declares
       def initialize *o
         super
-        
+        @macro_declares = {}
         @params = compiler.handle(node.params)
         if subast[0].is_a?(Type)
           @return_type = ResolvedType.new(subast.shift)
@@ -1777,7 +2307,7 @@ module Q
       end
  
       def symbol
-        node.symbol.symbol
+        node.symbol.symbol rescue node.symbol.value
       end
       
       def get_childrens_scope
@@ -1785,6 +2315,8 @@ module Q
       end
      
       def build_str ident = 0
+        p BUILD_METHOD: self.symbol, SCOPE: self.scope.sym
+
         plist = params.typed.reverse.map do |p| p.build_str end
         
         params.typed.reverse.each_with_index do |p,i|
@@ -1794,19 +2326,23 @@ module Q
             break
           end
         end
-        
-        rt = return_type ? return_type.type : :void
-        
-        ret = return_type and return_type.nullable?
-        if ret and rt.to_sym!=:void
-          if !subast.find do |q| q.is_a?(Return) end
-            ret = "\n\n#{get_indent(ident+2)}return null;"
-          else
-            ret = ""
-          end
-        else
-          ret = ""
+
+        if macro?
+          @q_macro = scope.sym.split("::").join("__")+"__"+symbol.to_s
+          body = write_body(0)
+          rr = /return \((.*?)\)/
+          body =~ rr
+          
+          rv = $1
+          m=Command::Macro.from_def(self,(params.untyped.reverse.map do |p| p.name end), body.gsub(rr,"%return #{rv}"))
+          Command::MACROS[scope.sym.split("::").join(".")+"."+symbol.to_s] = m
+     
+          mark_prepend_newline false
+          mark_newline false
         end
+
+        return '' if is_macro?
+
         
         kind = self.kind
         visibility = self.visibility
@@ -1826,17 +2362,81 @@ module Q
           visibility = ""
           bool = true
         end
-        
-        "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{delegate} #{rt} #{symbol}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"}" + 
-        if delegate == "" or "virtual" == kind
-          " {\n" +
-          write_body(ident) +
-          ret +
-          "\n#{get_indent(ident)}}"
-        else
-          ";"
+
+        generics = ''
+        if @generics
+          generics = "<"+
+          @generics.map do |g|
+            g.is_a?(::String) ? g : g.build_str
+          end.join(", ")+
+          ">"
         end
+        if delegate == "" or "virtual" == kind
+          h=" {\n"
+          
+          z=write_body(ident)
+          y="\n#{get_indent(ident)}}"
+        else
+          h=";"
+        end
+
+        return_type = self.return_type
+        if r_=subast.find do |q| q.is_a?(Return) end
+          qq=r_.subast[0].build_str()
+          if t_ = get_childrens_scope.locals[qq] and t_.type != :infered and !return_type
+            return_type = t_
+            rt = t_.type
+          elsif qq =~ /^\((.*)\)[a-zA-Z]/
+            rt = $1
+            return_type = nil
+          else
+            rt = return_type ? return_type.type : :void
+            #p MT: rt, sym: symbol, qq: qq
+            case qq
+            when /^\"/
+              rt = "string"
+            when /^\@\"/
+              rt = "string"              
+            when /^\'/
+              rt = "char"
+            when /^[0-9]+\./
+              rt = "double"
+            when /^\-[0-9]+\./
+              rt = "double"
+            when /^[0-9]/
+              rt = "int"
+            when /^\-[0-9]/
+              rt = "int"  
+            end
+          end 
+        else
+        
+          rt = return_type ? return_type.type : :void
+        end
+        
+        ret = return_type and return_type.nullable?
+        if ret and rt.to_sym!=:void
+          if !subast.find do |q| q.is_a?(Return) end
+            ret = "\n\n#{get_indent(ident+2)}return null;"
+          else
+            ret = ""
+          end
+        else
+          ret = ""
+        end
+
+        rt = '' if symbol == :construct
+
+        rta = return_type.array ? "[]" : '' if return_type
+        "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{delegate} #{rt}#{rta} #{symbol}#{generics}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"}" +
+        h+(z ? z+ret+y : '')
       end
+
+      def set_generics generics
+        raise "Previous Generics Declaration" if @generics
+        @generics = generics.types
+        subast.delete generics
+      end  
       
       def signal
         @modifiers.index(:signal) ? "signal " : ""
@@ -1857,7 +2457,6 @@ module Q
           elsif scope.member.enum?
             return ""
           end
-          
             
           scope.is_a?(Q::Compiler::ClassScope) ? " #{@modifiers.index(:override) ? "override" : "virtual"}" : ""
         end
@@ -1905,24 +2504,24 @@ module Q
       
       def build_str(ident = 0)
         if is_regmatch?
-          scope.until_nil do |q|
-            if q.member.is_a?(Def)
+          begin;scope.until_nil do |q|
+            if q.is_a?(MethodScope)
               q.mark_has_match_data true
               break
             end
-          end
-          
+          end;rescue;end
                   
           return "#{get_indent(ident)}(#{right.build_str}).match(#{left.build_str}, 0, out #{get_match_data_variable})"
         end
-        
+        operand = self.operand
+        operand = "+=" if operand == :"<<"
         "#{get_indent(ident)}#{left.build_str} #{operand} #{right.build_str}"
       end
     end
     
     class Cast < Base
       handles Q::Ast::Binary, Binary do
-        left.is_a?(Q::Ast::SymbolLiteral) and operand.to_sym == :"<<"
+        (left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :"<<"
       end
       
       attr_reader :to, :what
@@ -1935,9 +2534,12 @@ module Q
       def build_str ident = 0
         case to.build_str.strip
         when "out"
+                what.parented self if what.is_a?(VarRef)
           "#{to.build_str} #{what.build_str}"
         when "ref"
+          what.parented self if what.is_a?(VarRef)
           "#{to.build_str} #{what.build_str}"
+      
         else
           "(#{to.build_str})#{what.build_str}"
         end
@@ -1950,9 +2552,10 @@ module Q
       include HasBody
       include DefaultMemberDeclaration
       
-      attr_accessor :symbol, :params, :return_type
+      attr_accessor :symbol, :params, :return_type, :macro_declares
       def initialize *o
         super
+        @macro_declares = {}
         
         @symbol = node.symbol.symbol
         @params = compiler.handle(node.params)
@@ -1990,9 +2593,57 @@ module Q
           else
             break
           end
-        end      
+        end
+
+        if macro?
+          body = write_body(0)
+          rr = /return \((.*?)\)/
+          body =~ rr
+          rv=$1
+          m=Command::Macro.from_def(self,(params.untyped.reverse.map do |p| p.name end), body.gsub(rr,"%return #{rv}"))
+          Command::MACROS[scope.sym.split("::").join(".")+"."+symbol.to_s] = m
+
+          mark_prepend_newline false
+          mark_newline false
+        end
+
+        return '' if is_macro?
+
+        bs = write_body(ident)
       
-        rt = return_type ? return_type.type : :void
+        return_type = self.return_type
+        if r_=subast.find do |q| q.is_a?(Return) end
+          qq=r_.subast[0].build_str()
+          if t_ = get_childrens_scope.locals[qq] and t_.type != :infered and !return_type
+            return_type = t_
+            rt = t_.type
+          elsif qq =~ /^\((.*)\)[a-zA-Z]/
+            rt = $1
+            return_type = nil
+          else
+            rt = return_type ? return_type.type : :void
+            #p MT: rt, sym: symbol, qq: qq
+            case qq
+            when /^\"/
+              rt = "string"
+            when /^\@\"/
+              rt = "string"              
+            when /^\'/
+              rt = "char"
+            when /^[0-9]+\./
+              rt = "double"
+            when /^\-[0-9]+\./
+              rt = "double"
+            when /^[0-9]/
+              rt = "int"
+            when /^\-[0-9]/
+              rt = "int"
+            end
+          end 
+        else
+        
+          rt = return_type ? return_type.type : :void
+        end
 
       
         if !static_construct? and !constructor?
@@ -2011,7 +2662,7 @@ module Q
         
         get_indent(ident) + 
         sig +
-        write_body(ident) +
+        bs +
         "\n#{get_indent(ident)}}"
       end
     end
@@ -2078,8 +2729,10 @@ module Q
       def parented *o
         super
         return unless params
+
         params.untyped.map do |p|
-          get_childrens_scope.append_lvar p.name,DeclaredType.new(p.name, nil)
+
+        get_childrens_scope.append_lvar p.name,DeclaredType.new(p.name, nil) 
         end
       end
       
@@ -2104,6 +2757,8 @@ module Q
     end
     
     class MethodAddArg < Base
+      include ResolvesAsMacro
+    
       handles Q::Ast::MethodAddArg
       
       def parented par
@@ -2112,10 +2767,23 @@ module Q
       end
       
       def build_str ident = 0
-        get_indent(ident) + subast[0].build_str +
-        "(" +
-        (subast[1] ? subast[1].build_str : "") +
-        ")"
+        if !m=is_macro?
+          get_indent(ident) + subast[0].build_str +
+          "(" +
+          (subast[1] ? subast[1].build_str : "") +
+          ")"
+        else
+          m.perform ident, subast[1]
+        end
+      end
+
+      def is_macro?
+        if m=Command::MACROS[subast[0].build_str]
+          return m
+        end
+
+        m=Command::MACROS[parent.scope.sym.split("::").join(".")+"."+subast[0].build_str]
+      rescue
       end
     end
     
@@ -2131,7 +2799,15 @@ module Q
       handles Q::Ast::FCall
       
       def build_str ident = 0
-        subast[0].symbol.to_s.gsub(/\?$/,'')
+        p = self
+        q=subast[0].symbol
+        while p=p.parent
+          if p.is_a?(HasModifiers) and p.macro?
+            q = (p.macro_declares[q] ||= p.macro_vcall(q))
+            break
+          end
+        end
+        return q.to_s.gsub(/\?$/,'') #if !m=is_macro?
       end
     end    
    
@@ -2156,7 +2832,7 @@ module Q
     class TypeType < Base
       FLAG = :type
       handles Q::Ast::Call, Call do;
-        target.is_a?(Q::Ast::SymbolLiteral) and (call.symbol.to_s =~ /^ref$/ or call.symbol.to_s =~ /^out$/ or call.symbol.to_s =~ /^(unowned|owned)/)
+        (target.is_a?(Q::Ast::SymbolLiteral) or target.is_a?(Q::Ast::DynaSymbol)) and (call.symbol.to_s =~ /^ref$/ or call.symbol.to_s =~ /^out$/ or call.symbol.to_s =~ /^(unowned|owned)/)
       end
       
       attr_reader :target, :call
@@ -2208,9 +2884,15 @@ module Q
       end
       
       def build_str ident = 0
+        what = @what.build_str
+        if scope and scope.member.macro?
+          @var_name = scope.member.macro_vcall(@var_name)
+          what = scope.member.macro_vcall(@what.build_str)
+        else
+        end
         get_childrens_scope().append_lvar @var_name.to_sym, DeclaredType.new(@var_name.to_sym, nil)
         
-        "#{get_indent(ident)}foreach (var #{@var_name} in #{@what.build_str})"+
+        "#{get_indent(ident)}foreach (var #{@var_name} in #{what})"+
         subast[1].build_str(ident).gsub(/^\(.*\=\> \{/, " {")
       end
       
@@ -2272,8 +2954,17 @@ module Q
         type = "int"
         _in = Q::Range.allocate
         _in.first = 0
-        _in.last = subast[0].target.build_str
+        q=subast[0].target.build_str
+        p = self
+        while p=p.parent
+          if p.is_a?(HasModifiers) and p.macro?
+            q = (p.macro_declares[q] ||= p.macro_vcall(q))
+            break
+          end
+        end
+        _in.last = q
         what = subast[1].params.untyped[0].name
+
         s = subast
         e.instance_exec() do
           @in = _in
@@ -2284,6 +2975,7 @@ module Q
             @_subast[1].subast
           end
         end
+        e.parented self
         e.build_str(ident)
       end
     end
@@ -2325,6 +3017,7 @@ module Q
             @_subast[1].subast
           end
         end
+     
         e.build_str(ident).gsub(/\;$/,'')
       end
     end
@@ -2363,7 +3056,7 @@ module Q
               @array = t
               @length = t.length
             end
-            p [:OK , t, @type = t.get_type]
+            @type = t.get_type
             
             if t.is_a?(Type)
               @out = t.out?
@@ -2387,10 +3080,26 @@ module Q
               @type = t.variable.symbol
             end
           else
+     
             @type = :infered
+            @type = t.build_str if t.is_a?(Q::ValaSourceGenerator::VCall) rescue :infered
+            qqq=t.build_str  if t.is_a?(Q::ValaSourceGenerator::Call)
+            
+            @type = t.build_str if t.is_a?(Q::ValaSourceGenerator::Call) and t.is_type? rescue :infered #and qqq=~/^[]/ rescue :infered
+            @type = t.to_sym if t.respond_to?(:to_sym) and t.to_sym != :infered
+
+            if t.is_a?(Cast) 
+              t.build_str =~ /\((.*?)\)/
+              @type=$1
+              def t.build_str ident=0
+                what.build_str ident
+              end if t.what.is_a?(Q::ValaSourceGenerator::Proc)
+            end
           end
         else
           @type = :infered
+
+          @type = t.to_sym if t.respond_to?(:to_sym) and t.to_sym != :infered
         end
       end
       
@@ -2431,11 +3140,22 @@ module Q
       attr_reader :name, :type, :array
       def initialize n, t, a=nil
         @name = n
-        t = t.to_sym if t.is_a?(::String)
+    
         super t,a
       end
       
-      def build_str ident = 0
+      def build_str ident = 0, p = nil
+     # @type = @t  if @t
+     
+     name = self.name
+     while p=p.parent
+       if p.is_a?(HasModifiers)
+         if p.macro?
+           name = (p.macro_declares[name] ||= p.macro_vcall(name) )
+           break
+         end
+       end
+     end if p
         (" "*ident) + "#{out? ? "out " : "#{ref? ? "ref " : "#{ owned? ? "owned " : "#{unowned? ? "unowned " : ""}"}"}"}#{type}#{array ? "[]" : ""} #{name}"
       end
     end
@@ -2469,9 +3189,10 @@ module Q
       attr_reader :typed, :untyped
       def initialize *o
         super
-        @typed = node.keywords.map do |n,t| 
+        @typed = node.keywords.map do |n,t|
+   
           tt = compiler.handle(t)
-
+          tt= tt.node.value if tt.is_a?(StringLiteral)
           Parameter.new(compiler.handle(n).name, tt)
         end
         
@@ -2501,6 +3222,18 @@ module Q
         node.value
       end 
     end  
+
+    class DynaSymbol < Base
+      handles Q::Ast::DynaSymbol
+      
+      def symbol
+        node.value
+      end
+
+      def build_str ident=0
+        symbol.to_s
+      end
+    end  
     
     class SymbolContent < Base
       handles Q::Ast::SymbolContent
@@ -2519,7 +3252,21 @@ module Q
       end
       
       def build_str ident = 0
-        '$('+subast[0].build_str+')'
+        q=subast[0].build_str#, p: pp=parent.parent.parent.parent.parent.parent
+
+        if pp.is_a?(Def)
+         
+          if pp.macro_declares.find do |qz, qx| qz == q end
+          else;
+            q=subast[0].build_str
+          end
+        end 
+
+        if parent.is_a?(RawValaCode)
+          "#{q}"
+        else
+          '$('+q+')'
+        end
       end
     end
     
@@ -2545,10 +3292,10 @@ module Q
         def build_str ident = 0
           s=""
           if declare?()
-            s=(" "*ident)+ "private #{@q.type}#{@q.array ? "[]" : ""} _#{@q.name};\n" + (" "*ident)
+            s="private #{@q.type}#{@q.array ? "[]" : ""} _#{@q.name};\n"
           end
           s+
-          (" "*ident)+ "public #{@q.type}#{@q.array ? "[]" : ""} #{@q.name} {"+
+          "#{" "*ident}public #{@q.type}#{@q.array ? "[]" : ""} #{@q.name} {"+
           "#{@get ? "#{@get}" : ""}"+
           "#{@set ? "#{@set}" : ""}"+
           "#{@construct ? "construct;" : ""}"+
@@ -2578,7 +3325,7 @@ module Q
       end
       
       def build_str ident = 0
-        @values.map do |v| (" "*ident)+v.build_str end.join("\n")
+        @values.map do |v| (" "*ident)+v.build_str(ident) end.join("\n")
       end
       
       def setter(v)

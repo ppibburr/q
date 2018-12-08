@@ -16,13 +16,37 @@ class Q::Require
   def initialize ast
     @line = ast.line
     @source = Q.filename
-    @path = File.expand_path(File.join(File.dirname(source), Q.src.split("\n")[ast.line-1].strip.gsub(/^require /,'').gsub(/'|"/,'').strip))  
+    @path = Q.src.split("\n")[ast.line-1].strip.gsub(/^require /,'').gsub(/'|"/,'').strip
   end
   
   def ok?
     if File.exist?(path)
       return true
     end
+
+    if path == "Q"
+      @path = File.join(File.dirname(__FILE__), "..", "std_macros.q")
+      return true
+    end
+
+    if path =~ /^Q\/(.*)/
+      pth = File.join(File.dirname(__FILE__), "..", $1)
+      if File.exist?(pth)
+        @path = pth
+        return true
+      end
+
+      pth = File.join(File.dirname(__FILE__), "..", $1+".q")
+      if File.exist?(pth)
+        @path = pth
+        return true
+      end      
+    end
+    
+    path = @path
+    return true if File.exist?(@path=File.expand_path(@path))
+    return true if File.exist?(@path=File.expand_path(File.join(File.dirname(Q.filename), path)))    
+    return true if File.exist?(@pathFile.expand_path(File.join("./", path)))
   end
 end
 
