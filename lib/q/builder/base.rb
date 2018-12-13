@@ -16,7 +16,7 @@ class Q::Require
   def initialize ast
     @line = ast.line
     @source = Q.filename
-    @path = Q.src.split("\n")[ast.line-1].strip.gsub(/^require /,'').gsub(/'|"/,'').strip
+    @path = Q.src.split("\n")[ast.line-1].strip.gsub(/^require /,'').gsub(/'|"/,'').strip.split(";")[0]
   end
   
   def ok?
@@ -46,7 +46,7 @@ class Q::Require
     path = @path
     return true if File.exist?(@path=File.expand_path(@path))
     return true if File.exist?(@path=File.expand_path(File.join(File.dirname(Q.filename), path)))    
-    return true if File.exist?(@pathFile.expand_path(File.join("./", path)))
+    return true if File.exist?(@path=File.expand_path(File.join("./", path)))
   end
 end
 

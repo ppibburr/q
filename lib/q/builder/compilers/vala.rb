@@ -158,6 +158,13 @@ module Q
         subast.map do |i| i.build_str end.join(", ")
       end
     end
+
+    class Break < Base
+      handles Q::Ast::Break
+      def build_str ident=0
+        (" "*ident)+"break"
+      end
+    end
     
     module DefaultMemberDeclaration
       include HasModifiers
@@ -1231,11 +1238,13 @@ p s
         return true if node.target.is_a? Q::Ast::SymbolLiteral
         return true if node.target.is_a? Q::Ast::DynaSymbol
         return true if @target.is_a?(Q::ValaSourceGenerator::Type)
+        return true if node.target.is_a? Q::Ast::ConstPathRef and node.target.subast[0].is_a?(Q::Ast::SymbolLiteral)
         false
       end
       
       def build_str ident = 0
         if !is_type?
+
          p = self
          str = @target.build_str
          while p = p.parent
@@ -1261,11 +1270,11 @@ p s
               end
             end
             s=get_indent(ident) + @target.build_str + " " + res
-          when /string|int|char|uint/
+          when /string|int|char|uint|double|float/
             s=get_indent(ident) + "(#{@target.build_str})" + "" + what.symbol.to_s
          
           else
-            if is_type?
+            if is_type? and node.q != :"::"
               s=get_indent(ident) + "(#{@target.build_str})" + "" + what.symbol.to_s
             else
               s=get_indent(ident) + @target.build_str + "." + what.symbol.to_s
@@ -2297,7 +2306,8 @@ end
         super
         @macro_declares = {}
         @params = compiler.handle(node.params)
-        if subast[0].is_a?(Type)
+
+        if subast[0].is_a?(Type) or (subast[0].is_a?(ConstPathRef) and subast[0].subast[0].is_a?(Type))
           @return_type = ResolvedType.new(subast.shift)
         end
         
@@ -2521,7 +2531,8 @@ end
     
     class Cast < Base
       handles Q::Ast::Binary, Binary do
-        (left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :"<<"
+        ((left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :"<<") or
+        ((left.is_a?(Q::Ast::ConstPathRef)  and left.subast[0].is_a?(Q::Ast::SymbolLiteral)) and operand.to_sym == :"<<")
       end
       
       attr_reader :to, :what
@@ -2563,7 +2574,7 @@ end
         @subast = node.body.subast[0].children.map do |c| compiler.handle(c) end
         @subast.each do |c| c.parented self end
         
-        if subast[0].is_a?(Type)
+        if subast[0].is_a?(Type) or (subast[0].is_a?(ConstPathRef) and subast[0].subast[0].is_a?(Type))
           @return_type = ResolvedType.new(subast.shift)
         end
         

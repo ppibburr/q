@@ -16,10 +16,12 @@ require "./lib/q/builder/compilers/vala.rb"
 Q::Ast.compiler_type = Q::ValaSourceGenerator
 
 require 'optparse'
-ARGV << '-h' if ARGV.empty? or ARGV[0] =~ /^\-/
 
+$V_ARGV = secondary_arguments = []
 options = {:valac=>'valac', :verbose => false, :compile => true}
+h=nil
 optparse = OptionParser.new do |opts|
+h=opts
   opts.banner = "Q Compiler\n\nUsage: valaq file [options] [-- [valac_options]]"
   opts.separator ""
   opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
@@ -74,8 +76,15 @@ optparse = OptionParser.new do |opts|
     options[:valac] = v
   end
   
-  opts.on("-e", "--exec", "execute after compiling") do
+  opts.on("-r", "--run", "execute after compiling") do |v|
     options[:exec] = true
+  end
+
+  opts.on("-e", "--exec=CODE", "execute after compiling") do |v|
+    options[:exec] = true
+    options[:inline] = true
+    $V_ARGV.unshift tf="./.e.q"
+    File.open(tf,"w") do |to| to.puts v end
   end   
   
   opts.on( "--version", "show the version") do
@@ -92,8 +101,11 @@ optparse = OptionParser.new do |opts|
   opts.separator ""   
 end
 
+puts ARGV  if ARGV.empty? or !ARGV.find do |a| a !~ /^\-/ end
+puts ARGV
 arguments = ARGV.dup
-$V_ARGV = secondary_arguments = []
+
+
 
 first_run = true
 errors = false
@@ -110,7 +122,7 @@ while errors || first_run
     arguments.delete(e.args)
   end
 end
-
+secondary_arguments.shift if options[:inline];
 primary_arguments = ARGV.dup
 secondary_arguments.each do |cuke_arg|
   primary_arguments.delete(cuke_arg)
@@ -178,7 +190,6 @@ def perform f, reqs=[]
   Q::COMMENTS.push *COMMENTS[f]
   File.open(vala_file(f), "w") do |f| f.puts Q::ValaSourceGenerator.new(ast).compile end
 end
-
 f = File.expand_path(secondary_arguments.shift)
 REL_DIR = File.dirname(f)
 perform f, reqs = []

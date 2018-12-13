@@ -19,7 +19,7 @@ namespace module Q
       files = :string[]
       `#{files} = {};`
 
-      c = :'Q.read_dir_cb'
+      c = :Q::read_dir_cb
       `#{c} = #{cb}`
 
       name = dir.read_name()
@@ -59,7 +59,7 @@ namespace module Q
     es = Process.exit_status(status);
 
     if $M > 1
-      c = :'Q.spawn_sync_cb'
+      c = :Q::spawn_sync_cb
      `#{c} = #{cb}`
       c(es, stdout_, stderr)
     end
@@ -118,8 +118,8 @@ namespace module Q
   end
 
   class File
-    def self.read(f:string) :string?
-      ss = :string
+    def self.read(f:string)
+      ss = :string?
       FileUtils.get_contents(f, :out.ss)
       return ss
     end
@@ -189,7 +189,7 @@ namespace module Q
       return Q::Env::Iterator.new()
     end
 
-    def to_h() :Hash
+    def to_h() :Q::Hash
       h=Hash[:string, :string].new()
       GLib::Environment.list_variables().each do |v|
         h[v] = get(v)
@@ -256,7 +256,7 @@ namespace module Q
     end
 
     def key_index(k:T) :int
-      i = -1
+      i=-1
       i = Q::Iterable.find(:'string[]'._keys,  :string << k)  if typeof(T) == typeof(:string)
       i = Q::Iterable.find(:'int[]'._keys,     :int << k)     if typeof(T) == typeof(:int)      
       i = Q::Iterable.find(:'double?[]'._keys, :double? << k) if typeof(T) == typeof(:double?) 

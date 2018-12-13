@@ -144,6 +144,11 @@ module Q
       include HasArguments
       register do :next end
     end    
+
+    class Break < Event
+      include HasArguments
+      register do :break end
+    end 
     
     class VarRef < Event
       include HasArguments
@@ -971,7 +976,8 @@ module Q
     
     def Q.parse_error event, line
       puts "#{line}, unsupported #{event}."
-      puts "#{src.split("\n")[line-1]}"
+      puts "#{filename}"
+      puts "#{open(filename).read.split("\n")[line-1]}"
       exit(1)
     end 
   end
