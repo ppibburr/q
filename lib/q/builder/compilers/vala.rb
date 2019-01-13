@@ -2590,7 +2590,21 @@ end
         end 
         
         operand = self.operand
-        operand = "+=" if operand == :"<<"
+
+        if operand == :"<<"
+          if left.is_a?(VarRef)
+            s = left.symbol
+            if s=="?" or [:int,:uint,:long,:int64,:uint64,:int32,:uint32,:int16,:uint16,:guint,:guint32,:guint64,:guint16,:gint,:gint32,:gint16,:gint64].index(scope.locals[s.to_s].type)
+              
+            else
+              operand = "+=" if operand == :"<<"
+            end
+
+          elsif !left.is_a?(Numerical)
+            operand = "+=" if operand == :"<<"
+          end
+        end
+        
         "#{get_indent(ident)}#{left.build_str} #{operand} #{right.build_str}"
       end
     end
