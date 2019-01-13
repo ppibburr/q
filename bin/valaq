@@ -159,23 +159,31 @@ TARGET_PC_PATH      = options[:pc_dir]      || "/usr/share/pkgconfig/"
 
 def vala_file f
   base = File.basename(f)
-  dir  = File.dirname(f)
-  File.join(dir,"#{base.gsub(/\.q$/,".vala")}")
+  fdir = File.dirname(f)
+  dir  = File.expand_path("./q_generated/#{File.basename($prog).split(".q")[0]}")
+  `mkdir -p #{dir}/#{fdir}`
+  File.join(dir,fdir,"#{base.gsub(/\.q$/,".vala")}")
 end
 
 COMMENTS = {}
-
+$performed = []
 def perform f, reqs=[]
-  STDOUT.puts "Transpile: #{f} ..."
-  reqs << f unless reqs.index f
+  f = File.expand_path(f)
+  return if $performed.index(f)
 
+  $performed << f
+  
+  reqs << f unless reqs.index f
+  STDOUT.puts "Transpile: #{f} ..."
+  
   code = open(f).read
-  ast = Q.build(code, f)
+  ast = $ast = Q.build(code, f)
 
   ast.parented nil
   COMMENTS[f] = Q::COMMENTS.dup;
   Q::COMMENTS.clear
   ast.requires.each do |req|
+  STDOUT.puts REG: req
     if req.ok?
     lf = Q.filename
     perform req.path, reqs
@@ -190,18 +198,18 @@ def perform f, reqs=[]
   Q::COMMENTS.push *COMMENTS[f]
   File.open(vala_file(f), "w") do |f| f.puts Q::ValaSourceGenerator.new(ast).compile end
 end
-f = File.expand_path(secondary_arguments.shift)
+$prog = f = File.expand_path(secondary_arguments.shift)
 REL_DIR = File.dirname(f)
-perform f, reqs = []
+perform f, $reqs=reqs = []
 
 if options[:gir]
   secondary_arguments.insert(0, "--gir=#{options[:gir]}.gir --header=#{z=options[:gir].split("-")[0].downcase}.h --library #{options[:gir]} -o lib#{z}.so")
 end
 p secondary_arguments
 if options[:compile]
-  STDOUT.puts cmd="valac #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""}".strip
+  STDOUT.puts cmd="valac -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""}".strip
   exit(1) unless system(cmd)
-  system "rm #{vs}" if options[:remove]
+  system "rm -rf q_generated/#{File.basename($prog).split(".q")[0]}" if options[:remove]
  
   if options[:gir]
     [BUILD_PATH, BUILD_GIR_PATH, BUILD_TYPELIB_PATH, BUILD_LIB_PATH, BUILD_VAPI_PATH, BUILD_INCLUDE_PATH, BUILD_PC_PATH].each do |pth|

@@ -1,23 +1,22 @@
+Q::package(:"libusb-1.0")
+      
 namespace module Q
   class USB
     delegate; def device_iter(d: :LibUSB::Device?); end
   
-    macro; def devices(cb)
-      Q::package(:"libusb-1.0")
-      # declare objects
-      context = :LibUSB::Context;
+    def self.devices(cb:device_iter)
+      context  = :LibUSB::Context
+      dev_list = :'LibUSB.Device?[]'
+      
       LibUSB::Context.init(:out.context)  
-      devices = :'LibUSB.Device?[]';
-      nd = context.get_device_list(:out.devices) - 1
-      if $M > 0
-        c = :'Q.USB.device_iter'
-        `#{c} = #{cb}`
 
-        nd.times do |i|
-          c(devices[i])
-        end
+      nd = context.get_device_list(:out.dev_list) - 1
+
+      nd.times do |i|
+        cb(dev_list[i])
       end
-      return devices
+  
+      return dev_list
     end
   end
 end

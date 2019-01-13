@@ -5,7 +5,15 @@ def add_package p
   $V_ARGV << "--pkg #{p}" unless $V_ARGV.index("--pkg #{p}")
 end
 
+def add_flag f
+  $V_ARGV << "#{f}" unless $V_ARGV.index("#{f}")
+end
+
 module Q
+  def self.at_exit
+    @exit ||= []
+  end
+
   module ResolvesAsMacro
     def is_macro?
       ValaSourceGenerator::Command::MACROS[symbol] || ValaSourceGenerator::Command::MACROS[scope.sym.split("::").join(".")+"."+symbol]
@@ -71,7 +79,7 @@ module Q
     end
   
     class Base < Member
-      attr_accessor :scope
+      attr_writer :scope
     
       COMPILER = Q::ValaSourceGenerator
       def initialize *o
@@ -82,6 +90,17 @@ module Q
       
       def get_indent ident
         " " * ident
+      end
+
+      def scope
+        return @scope if @scope
+        p = self
+        while p and p=p.parent
+            if @scope=p.scope
+              break
+            end
+        end
+        @scope
       end
       
       def parented par
@@ -97,7 +116,7 @@ module Q
   
     module HasModifiers
       MODIFIERS = [
-        :public, :private, :static, :class, :delegate, :async, :virtual, :override, :abstract, :signal,:macro
+        :public, :private, :static, :class, :delegate, :async, :virtual, :override, :abstract, :signal,:macro,:new
       ]
     
       MODIFIERS.each do |m|
@@ -635,6 +654,12 @@ p s
         "\"#{Q::DATA[Q.filename]}\""
       end
 
+      mm=MACROS['Q.at_exit'] = Macro.new('')
+      def mm.perform(ident, ast)
+        Q.at_exit << ast.subast[0].node.value
+        ""
+      end
+
       mm=MACROS['Q.get_macros'] = Macro.new('')
       def mm.perform(ident, ast)
         @body="string[] %rav1_Q__get_macros;
@@ -650,6 +675,17 @@ p s
      
         pkgs = ast.map do |q|
           add_package q.value
+        end
+        @body = ''
+        super ident, nil
+      end
+
+      fm=MACROS['Q.flags'] = Macro.new('')
+      def fm.perform(ident, ast)
+        ast=ast.subast[0].subast;
+     
+        flags = ast.map do |q|
+          add_flag q.value
         end
         @body = ''
         super ident, nil
@@ -722,6 +758,10 @@ p s
           "#{t}Process.spawn_command_line_sync(#{subast[1].build_str}, null, null, out _q_local_scope_process_exit_status)"
         elsif subast[0].symbol.to_sym == :sleep
           "#{t}Thread.usleep((ulong)(#{subast[1].build_str} * 1000 * 1000))"
+        elsif subast[0].symbol.to_sym == :printf
+          "#{t}stdout.printf(#{subast[1].build_str});"    
+        elsif subast[0].symbol.to_sym == :print
+          "#{t}stdout.printf((#{subast[1].build_str}).to_string());"
         elsif subast[0].symbol.to_sym == :puts
           "#{t}stdout.puts((#{subast[1].build_str}).to_string()); stdout.putc('\\n');"        
         elsif subast[0].symbol.to_sym == :require
@@ -742,6 +782,14 @@ p s
           mark_semicolon false
           n=scope.sym.split("::").join('.')+"."+subast[1].subast.shift.build_str rescue subast[1].subast.shift.build_str
           MACROS[n] = Macro.new(subast[1].subast[0].node.value)
+
+          if req = subast[1].subast[1]
+            rr = Q::Require.allocate
+            rr.path = req.node.value
+            rr.ok?
+            ::Object.send :perform, rr.path, $reqs
+          end
+
           ''
         elsif macro = MACROS[subast[0].symbol]
           mark_semicolon false
@@ -928,7 +976,14 @@ p s
       handles Q::Ast::Program
       include HasBody
       def build_str ident = -2
-        write_body(ident)
+        write_body(ident)+
+        if $prog == Q.filename
+          Q.at_exit.map do |v|
+            v
+          end.join("\n\n")
+        else
+          ""
+        end
       end
       
       def initialize *o
@@ -1243,6 +1298,10 @@ p s
       end
       
       def build_str ident = 0
+        #if @target.build_str == "Q" and @what.symbol.to_s == "ENV"
+        #  return (" "*ident)+"new Q.Env()"
+        #end
+       
         if !is_type?
 
          p = self
@@ -1539,7 +1598,9 @@ end
             "#{get_indent(ident)}"+variable.symbol + do_sets_field + " = #{value.build_str}"          
           end
         else
-          raise "cant assign #{variable.kind}: #{variable.symbol}"
+         # raise "cant assign #{variable.kind}: #{variable.symbol}"
+
+          "#{get_indent(ident)}"+variable.build_str +  do_sets_field  + " = #{value.build_str}"    
         end
       end
     end
@@ -2468,7 +2529,7 @@ end
             return ""
           end
             
-          scope.is_a?(Q::Compiler::ClassScope) ? " #{@modifiers.index(:override) ? "override" : "virtual"}" : ""
+          scope.is_a?(Q::Compiler::ClassScope) ? " #{@modifiers.index(:new) ? "new" : ""} #{@modifiers.index(:override) ? "override" : "virtual"}" : ""
         end
       end
     end  
@@ -2519,10 +2580,15 @@ end
               q.mark_has_match_data true
               break
             end
-          end;rescue;end
+          end;end
                   
           return "#{get_indent(ident)}(#{right.build_str}).match(#{left.build_str}, 0, out #{get_match_data_variable})"
         end
+
+        if left.is_a?(StringLiteral) and operand == :"*" and right.is_a?(Numerical)
+          return "\"#{left.subast[0].subast[0].node.value*right.node.value.to_i}\""
+        end 
+        
         operand = self.operand
         operand = "+=" if operand == :"<<"
         "#{get_indent(ident)}#{left.build_str} #{operand} #{right.build_str}"
@@ -3278,6 +3344,17 @@ end
         else
           '$('+q+')'
         end
+      end
+    end
+
+    class IfOp < Base
+      handles Q::Ast::IfOp
+      def build_str ident=0
+        s=subast[0].build_str(ident)+" ? "+
+        subast[1].build_str+" : "+
+        subast[2].build_str
+        STDOUT.puts s
+        s
       end
     end
     

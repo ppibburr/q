@@ -1,10 +1,32 @@
+`extern void exit(int exit_code);`
 namespace module Q
+  @@main_loop = :MainLoop?
+
+  delegate; def main_cb(); end
+
+  def self.main(cb: :main_cb?) :MainLoop
+    if @@main_loop == nil
+      @@main_loop = MainLoop.new()
+      cb() if cb != nil
+      @@main_loop.run()
+    end
+
+    return @@main_loop
+  end
+
+  def self.quit()
+     @@main_loop.quit() if @@main_loop != nil
+  end
+
   macro :send, '%v1_Q__send.%v2_Q__send'
   macro :invoke, '%v1_Q__invoke.%v2_Q__invoke()'
   macro :invoke1, '%v1.%v2(%v3)'
   macro :invoke2, '%v1.%v2(%v3,%v4)'
   macro :invoke3, '%v1.%v2(%v3,%v4,%v5)'
   macro :invokev, '%v1.%v2(%v3)'
+
+  macro :timeout, 'GLib.Timeout.add(%v1_Q__timeout, '
+  macro :idle,    'GLib.Idle.add('
 
   macro; def cc_time()
     Q::eval(:'string', 'Time.now.to_s')
@@ -117,7 +139,7 @@ namespace module Q
     end
   end
 
-  class File
+  namespace module File
     def self.read(f:string)
       ss = :string?
       FileUtils.get_contents(f, :out.ss)
@@ -138,6 +160,10 @@ namespace module Q
       ret=Q::Iterable.join(buff, "/")
       return ret
     end
+
+    macro :monitor, 'new Q.File.Monitor(%v1_Q__File__monitor, ', 'Q/file/monitor.q'
+    macro :created, 'new Q.File.Monitor(%v1_Q__File__created).created(', 'Q/file/monitor.q'
+    macro :deleted, 'new Q.File.Monitor(%v1_Q__File__deleted).deleted(', 'Q/file/monitor.q'    
   end
 
   macro; def read(f)
@@ -146,17 +172,6 @@ namespace module Q
 
   macro; def ENV(n)
     GLib::Environment.get_variable(n)
-  end
-
-  macro; def t(ba)
-    ret = Q::Iterable.join(ba,'WORKED')
-    return ret
-  end
-
-  macro; def fg()
-    v = :int[4,5,6]
-    ret = Q::t(v)
-    return ret
   end
 
   macro; def vargv()
@@ -201,6 +216,10 @@ namespace module Q
       return GLib::Environment.list_variables()
     end
 
+    def to_string()
+      Q::Iterable.join(keys(),", ")
+    end
+
     class Iterator
       @id = 0
       @list = :'string[]?'
@@ -233,7 +252,7 @@ namespace module Q
       _values = :U[0]
     end
 
-    def set(k:T, v: :U?)
+    new;def set(k:T, v: :U?)
       i = Q::Iterable.find(_keys,k)
       if i < 0
         i=_keys.length
@@ -246,7 +265,7 @@ namespace module Q
       @_values[i] = v
     end
 
-    def get(k:T) :U?
+    new;def get(k:T) :U?
       i = key_index(k)
 
       if i >= 0
@@ -257,9 +276,9 @@ namespace module Q
 
     def key_index(k:T) :int
       i=-1
-      i = Q::Iterable.find(:'string[]'._keys,  :string << k)  if typeof(T) == typeof(:string)
-      i = Q::Iterable.find(:'int[]'._keys,     :int << k)     if typeof(T) == typeof(:int)      
-      i = Q::Iterable.find(:'double?[]'._keys, :double? << k) if typeof(T) == typeof(:double?) 
+      i = Q::Iterable.find(:'string[]'._keys,  :string << k)  if typeof(:T) == typeof(:string)
+      i = Q::Iterable.find(:'int[]'._keys,     :int << k)     if typeof(:T) == typeof(:int)      
+      i = Q::Iterable.find(:'double?[]'._keys, :double? << k) if typeof(:T) == typeof(:double?) 
       return i
     end
 

@@ -707,6 +707,11 @@ module Q
       end
     end
 
+    class IfOp < Event
+      include HasArguments
+      register do :ifop end
+    end
+
     class While < Event
       include HasArguments
       register do :while end

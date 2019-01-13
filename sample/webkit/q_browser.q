@@ -1,8 +1,9 @@
-include Gtk;
-include WebKit;
+Q::package(:"webkit2gtk-4.0")
+
+using Gtk;
+using WebKit;
 
 class QBrowser < Window
-
   TITLE            = "Q Browser";
   HOME_URL         = "http://acid3.acidtests.org/";
   DEFAULT_PROTOCOL = "http";
@@ -11,13 +12,11 @@ class QBrowser < Window
   :Entry[@url_bar]
   :WebView[@web_view]
   :Label[@status_bar]
-  :ToolButton[@back_button, @forward_button, @reload_button]
+  :Button[@back_button, @forward_button, @reload_button]
 
   def initialize()
     @title = QBrowser::TITLE;
     set_default_size(800, 600);
-
-    @protocol_regex = /.*:\/\/.*/;
 
     create_widgets();
     connect_signals();
@@ -26,16 +25,17 @@ class QBrowser < Window
   end
 
   def create_widgets()
-    toolbar = Toolbar.new();
-    @back_button    = ToolButton.new_from_stock(Stock::GO_BACK);
-    @forward_button = ToolButton.new_from_stock(Stock::GO_FORWARD);
-    @reload_button  = ToolButton.new_from_stock(Stock::REFRESH);
+    toolbar = Gtk::HBox.new(false, 0);
+    @back_button    = Button.new_from_stock(Stock::GO_BACK);
+    @forward_button = Button.new_from_stock(Stock::GO_FORWARD);
+    @reload_button  = Button.new_from_stock(Stock::REFRESH);
     
-    toolbar.add(@back_button);
-    toolbar.add(@forward_button);
-    toolbar.add(@reload_button);
+    toolbar.pack_start(@back_button, false, false, 0);
+    toolbar.pack_start(@forward_button, false, false, 0);
+    toolbar.pack_start(@reload_button, false, false, 0);
     
     @url_bar  = Entry.new();
+    toolbar.pack_start(@url_bar, true, true, 0)
     @web_view = WebView.new();
     
     scrolled_window = ScrolledWindow.new(nil, nil);
@@ -47,7 +47,7 @@ class QBrowser < Window
     
     vbox = VBox.new(false, 0);
     vbox.pack_start(toolbar, false, true, 0);
-    vbox.pack_start(@url_bar, false, true, 0);
+
     vbox.add(scrolled_window);
     vbox.pack_start(@status_bar, false, true, 0);
     
@@ -58,13 +58,15 @@ class QBrowser < Window
     @destroy.connect(Gtk.main_quit);
     @url_bar.activate.connect(on_activate);
     
-    @web_view.title_changed.connect() do |source, frame, title|
-      @title = "#{title} - #{QBrowser::TITLE}";
+    @web_view.notify["title"].connect() do
+      @title = "#{@web_view.title} - #{QBrowser::TITLE}";
     end
     
-    @web_view.load_committed.connect() do |source, frame|
-      @url_bar.text = frame.get_uri();
-      update_buttons();
+    @web_view.load_changed.connect() do |w, e|
+      if e == WebKit::LoadEvent::COMMITTED
+        @url_bar.text = @web_view.get_uri();
+        update_buttons();
+      end
     end
     
     @back_button.clicked.connect(@web_view.go_back);
@@ -80,20 +82,20 @@ class QBrowser < Window
   def on_activate()
     url = @url_bar.text;
     
-    if (!@protocol_regex.match(url))
+    unless url=~/.*:\/\/.*/
       url = "#{QBrowser::DEFAULT_PROTOCOL}://#{url}";
     end
     
-    @web_view.open(url);
+    @web_view.load_uri(url);
   end
 
   def start()
     show_all();
     
-    @web_view.open(QBrowser::HOME_URL);
+    @web_view.load_uri(QBrowser::HOME_URL);
   end
 
-  def self.main(args: :string[]):int
+  def self.main(args: :string[])
     Gtk.init(:ref << args);
 
     browser = QBrowser.new();

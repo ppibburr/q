@@ -12,7 +12,7 @@ require "compiler"
 require "ast"
 
 class Q::Require
-  attr_reader :path, :line, :source
+  attr_accessor :path, :line, :source
   def initialize ast
     @line = ast.line
     @source = Q.filename
@@ -30,17 +30,17 @@ class Q::Require
     end
 
     if path =~ /^Q\/(.*)/
-      pth = File.join(File.dirname(__FILE__), "..", $1)
-      if File.exist?(pth)
-        @path = pth
-        return true
-      end
-
       pth = File.join(File.dirname(__FILE__), "..", $1+".q")
       if File.exist?(pth)
         @path = pth
         return true
-      end      
+      end  
+
+      pth = File.join(File.dirname(__FILE__), "..", $1)
+      if File.exist?(pth)
+        @path = pth
+        return true
+      end    
     end
     
     path = @path
