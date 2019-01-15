@@ -780,14 +780,22 @@ p s
           "out #{subast[1].build_str}".gsub(/^\(/,'').gsub(/\)$/,'')
         elsif (s=subast[0].symbol) == "macro"
           mark_semicolon false
-          n=scope.sym.split("::").join('.')+"."+subast[1].subast.shift.build_str rescue subast[1].subast.shift.build_str
-          MACROS[n] = Macro.new(subast[1].subast[0].node.value)
 
-          if req = subast[1].subast[1]
-            rr = Q::Require.allocate
-            rr.path = req.node.value
-            rr.ok?
-            ::Object.send :perform, rr.path, $reqs
+          n = scope.sym.split("::").join('.')+"."+subast[1].subast.shift.build_str rescue subast[1].subast.shift.build_str
+          m = MACROS[n] = Macro.new(subast[1].subast[0].node.value)
+
+          subast = self.subast
+          
+          m.singleton_class.define_method :perform do |*o|
+            if req = subast[1].subast[1]
+              rr = Q::Require.allocate
+              rr.path = req.node.value
+              rr.ok?
+
+              ::Object.send :perform, rr.path, $reqs
+            end
+
+            super *o
           end
 
           ''
@@ -2594,7 +2602,8 @@ end
         if operand == :"<<"
           if left.is_a?(VarRef)
             s = left.symbol
-            if s=="?" or [:int,:uint,:long,:int64,:uint64,:int32,:uint32,:int16,:uint16,:guint,:guint32,:guint64,:guint16,:gint,:gint32,:gint16,:gint64].index(scope.locals[s.to_s].type)
+            lv = scope.locals[s.to_s]
+            if s=="?" or lv && [:int,:uint,:long,:int64,:uint64,:int32,:uint32,:int16,:uint16,:guint,:guint32,:guint64,:guint16,:gint,:gint32,:gint16,:gint64].index(lv.type)
               
             else
               operand = "+=" if operand == :"<<"
@@ -2780,14 +2789,14 @@ end
       end
       
       def build_str ident = 0
+        parent.mark_semicolon false
         mark_semicolon false
         mark_newline true
      
         mark_prepend_newline true
         (t = get_indent(ident)) +
         subast.shift.build_str(ident) +
-        " {\n" +
-        write_body(ident).gsub(/\(.*\=\> \{/, '').gsub(/\};\n$/,"}\n")
+        write_body(ident).gsub(/\(.*?\=\> \{/, ' {').gsub(/\}\);.*?$/,"}\n").gsub("};","}")
       end
     end      
     

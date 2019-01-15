@@ -1,8 +1,7 @@
+require 'Q'
 require "./lib/popen.q"
 
-def main(args: :string[]):int
-  loop = GLib::MainLoop.new()
-  
+def main(args: :string[]):int  
   system "ruby -e 'p 9;exit(1)'"
   
   print("Process exited with: #{$?} #=> #{$? << 8}\n")
@@ -21,10 +20,10 @@ def main(args: :string[]):int
       print("Process #{pid}: Exited with, #{status}\n")
     end
     sleep 3
-    loop.quit()
+    Q.quit()
   end
   
-  loop.run()
+  Q.main()
   
   
   return 0
