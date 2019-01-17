@@ -207,7 +207,7 @@ if options[:gir]
 end
 p secondary_arguments
 if options[:compile]
-  STDOUT.puts cmd="valac -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""}".strip
+  STDOUT.puts cmd="valac -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
   exit(1) unless system(cmd)
   system "rm -rf q_generated/#{File.basename($prog).split(".q")[0]}" if options[:remove]
  
