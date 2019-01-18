@@ -3,8 +3,8 @@ Q::package(:"gio-2.0")
 namespace module Q
   namespace module File
     class Monitor
-      @file    = :'GLib.File'
-      @monitor = :'GLib.FileMonitor'
+      @file    = :GLib::File
+      @monitor = :GLib::FileMonitor
 
       delegate; def monitor_cb(src: :GLib::File?, dest: :GLib::File?, evt: :GLib::FileMonitorEvent); end
       delegate; def event_cb(file: :GLib::File);   end

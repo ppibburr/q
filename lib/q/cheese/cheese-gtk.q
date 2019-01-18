@@ -2,28 +2,25 @@ Q::package(:'cheese', :'cheese-gtk', :'clutter-gtk-1.0', :'clutter-gst-3.0')
 
 namespace module CheeseGtk
   class CameraWidget < GtkClutter::Embed
-    @camera                  = :'Cheese.Camera'
-    @video_preview           = :'Clutter.Actor' 
-    @viewport_layout         = :'Clutter.Actor'   
-    @viewport_layout_manager = :'Clutter.BinLayout'
-    @countdown_layer         = :'Clutter.Text'   
-    @background_layer        = :'Clutter.Actor' 
-    @error_layer             = :'Clutter.Text'    
-    @timeout_layer           = :'Clutter.Text'     
+    @camera                  = :Cheese::Camera
+    @viewport_layout_manager = :Clutter::BinLayout
+    
+    :Clutter::Actor[@video_preview, @viewport_layout, @background_layer] 
+    :Clutter::Text[@countdown_layer, @error_layer, @timeout_layer]
     
     def self.new()
       clutter_builder  = Clutter::Script.new();
-      viewport         = :Clutter::Stage << get_stage()        
+      viewport         = :Clutter::Stage > get_stage()        
       
       clutter_builder.load_from_data(DATA, -1);
 
-      @video_preview           = :'Clutter.Actor'     << clutter_builder.get_object("video_preview")
-      @viewport_layout         = :'Clutter.Actor'     << clutter_builder.get_object("viewport_layout");
-      @viewport_layout_manager = :'Clutter.BinLayout' << clutter_builder.get_object("viewport_layout_manager");
-      @countdown_layer         = :'Clutter.Text'      << clutter_builder.get_object("countdown_layer");
-      @background_layer        = :'Clutter.Actor'     << clutter_builder.get_object("background")
-      @error_layer             = :'Clutter.Text'      << clutter_builder.get_object("error_layer");
-      @timeout_layer           = :'Clutter.Text'      << clutter_builder.get_object("timeout_layer");
+      @video_preview           = :Clutter::Actor     > clutter_builder.get_object("video_preview")
+      @viewport_layout         = :Clutter::Actor     > clutter_builder.get_object("viewport_layout")
+      @viewport_layout_manager = :Clutter::BinLayout > clutter_builder.get_object("viewport_layout_manager")
+      @countdown_layer         = :Clutter::Text      > clutter_builder.get_object("countdown_layer")
+      @background_layer        = :Clutter::Actor     > clutter_builder.get_object("background")
+      @error_layer             = :Clutter::Text      > clutter_builder.get_object("error_layer")
+      @timeout_layer           = :Clutter::Text      > clutter_builder.get_object("timeout_layer")
 
       video_preview.request_mode = Clutter::RequestMode::HEIGHT_FOR_WIDTH;
       

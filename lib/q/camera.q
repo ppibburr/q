@@ -6,14 +6,14 @@ namespace module Q
       PHOTO; VIDEO
     end
   
-    @_widget = :'CheeseGtk.CameraWidget'
+    @_widget = :CheeseGtk::CameraWidget
     property widget: :CheeseGtk::CameraWidget do
       get do
         return @_widget
       end
     end
 
-    @_camera = :'Cheese.Camera'
+    @_camera = :Cheese::Camera
     property camera: :Cheese::Camera do
       get do
         return @_widget.camera

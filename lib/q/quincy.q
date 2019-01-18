@@ -62,7 +62,7 @@ namespace module Quincy
 
   class Match
     :string[@path, @base_dir, @query, @method]
-    @message = :'Soup.Message'
+    @message = :Soup::Message
     @uri = :string
     @match_data = :string[]
     @params = :HashTable[:string, :string?]
@@ -101,7 +101,7 @@ namespace module Quincy
   end
 
   class Route
-    @block  = :'Quincy.App.cb'
+    @block  = :Quincy::App::cb
     @regexp = :Regex?
   end
 

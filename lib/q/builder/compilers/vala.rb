@@ -1,3 +1,6 @@
+#  :Goo[]?
+#
+
 $: << File.dirname(__FILE__)
 require "source_generator"
 
@@ -1327,7 +1330,7 @@ p s
           s=s.gsub(/\?$/,'')
         else
           case @target.build_str
-          when /out|ref/
+          when /^out|ref/
             res = what.symbol.to_s
             p = self
             while p and p=p.parent
@@ -1651,16 +1654,20 @@ end
         
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value)
         if type.infered?
+        STDOUT.puts "#{type.inspect}"
           raise "Cant infer field types: #{type.name}, #{type.type}"
         else
           if value.is_a?(Type)
             type.build_str +
             ((type.array and type.array.length) ? " = new #{type.type}[#{type.array.length}]" : "")
           elsif value.is_a?(Q::Compiler::KnownType)
-            "#{type.build_str} = #{value.build_str}"
+            "#{type.build_str}" + (!value.is_a?(ConstPathRef) ? " = #{value.build_str}" : '')
           elsif type.type == :bool
             "#{type.build_str} = #{value.build_str}"
+          elsif type and type.type
+            type.build_str
           else
+          STDOUT.puts value,type.inspect
             raise "Cant determine type for field #{symbol}"
           end
         end
@@ -1707,7 +1714,7 @@ end
     class FieldDeclare < Base
       FLAG = :fld_dec
       handles Q::Ast::ARef, ARef do
-        of.flags[:type] and values and values.subast[0].is_a?(Q::Ast::VarRef) and [:global, :instance, :class].index(values.subast[0].variable.kind)
+        (of.flags[:type] or of.is_a?(Ast::ConstPathRef)) and values and values.subast[0].is_a?(Q::Ast::VarRef) and [:global, :instance, :class].index(values.subast[0].variable.kind)
       end
       
       attr_reader :fields, :type
@@ -2364,20 +2371,38 @@ end
         "\n#{t}}"
       end
     end    
+
+    
     
     class Def < Base
       include HasBody
       include DefaultMemberDeclaration
       handles Q::Ast::Def
 
+      def match_type_path q
+        if (subast[0].is_a?(ConstPathRef))
+          s=subast[0].subast[0]
+          while s and s.is_a?(ConstPathRef)
+            s = s.subast[0]
+          end
+
+          return true if s.is_a?(Type)
+        end
+      end
+
       attr_reader :params, :return_type, :macro_declares
       def initialize *o
         super
         @macro_declares = {}
         @params = compiler.handle(node.params)
-
-        if subast[0].is_a?(Type) or (subast[0].is_a?(ConstPathRef) and subast[0].subast[0].is_a?(Type))
+STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
+        if subast[0].is_a?(Type)
           @return_type = ResolvedType.new(subast.shift)
+        elsif  match_type_path(self)
+          @return_type = subast[0].build_str
+          def (subast[0]).build_str ident=0
+            ""
+          end
         end
         
         mark_prepend_newline true
@@ -2394,7 +2419,7 @@ end
       end
      
       def build_str ident = 0
-        p BUILD_METHOD: self.symbol, SCOPE: self.scope.sym
+        p BUILD_METHOD: self.symbol, SCOPE: self.scope.sym, RT: return_type
 
         plist = params.typed.reverse.map do |p| p.build_str end
         
@@ -2469,7 +2494,7 @@ end
             rt = $1
             return_type = nil
           else
-            rt = return_type ? return_type.type : :void
+            rt = return_type ? (return_type.is_a?(::String) ? return_type : return_type.type) : :void
             #p MT: rt, sym: symbol, qq: qq
             case qq
             when /^\"/
@@ -2493,7 +2518,7 @@ end
           rt = return_type ? return_type.type : :void
         end
         
-        ret = return_type and return_type.nullable?
+        ret = return_type and (return_type.is_a?(::String) ? return_type =~ /\?$/ : return_type.nullable?)
         if ret and rt.to_sym!=:void
           if !subast.find do |q| q.is_a?(Return) end
             ret = "\n\n#{get_indent(ident+2)}return null;"
@@ -2506,7 +2531,7 @@ end
 
         rt = '' if symbol == :construct
 
-        rta = return_type.array ? "[]" : '' if return_type
+        rta = (return_type.is_a?(::String) ? return_type =~ /\[\]/ : return_type.array) ? "[]" : '' if return_type
         "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{delegate} #{rt}#{rta} #{symbol}#{generics}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"}" +
         h+(z ? z+ret+y : '')
       end
@@ -2620,8 +2645,9 @@ end
     
     class Cast < Base
       handles Q::Ast::Binary, Binary do
-        ((left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :"<<") or
-        ((left.is_a?(Q::Ast::ConstPathRef)  and left.subast[0].is_a?(Q::Ast::SymbolLiteral)) and operand.to_sym == :"<<")
+        (((left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :"<<") or
+        ((left.is_a?(Q::Ast::ConstPathRef)  and left.subast[0].is_a?(Q::Ast::SymbolLiteral)) and operand.to_sym == :"<<")) or (((left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :">") or
+        ((left.is_a?(Q::Ast::ConstPathRef)  and left.subast[0].is_a?(Q::Ast::SymbolLiteral)) and operand.to_sym == :">"))
       end
       
       attr_reader :to, :what
@@ -3133,6 +3159,7 @@ end
       def build_str ident = 0
         if subast[0].node.flags[:type]
           "#{get_indent(ident)}typeof (#{subast[0].build_str}#{subast[0].is_a?(ArrayDeclaration) ? "[]" : ""})"
+
         else
           "(#{subast[0].build_str ident})"
         end
@@ -3182,6 +3209,7 @@ end
           else
      
             @type = :infered
+            STDOUT.puts t
             @type = t.build_str if t.is_a?(Q::ValaSourceGenerator::VCall) rescue :infered
             qqq=t.build_str  if t.is_a?(Q::ValaSourceGenerator::Call)
             

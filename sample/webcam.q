@@ -1,55 +1,45 @@
 require "Q/camera"
 
-class Main < Object
-  @win = :'Gtk.Window'
-  @camera = :'Q.Camera'
+def main(argv: :string[])
+  CheeseGtk.init(:ref.argv)
+
+  w = Gtk::Window.new()
   
-  def initialize()
-    @win    = Gtk::Window.new()
-    v       = Gtk::VBox.new(false,0)
-    snap    = Gtk::Button.new_from_icon_name("gtk-save")
-    @camera = Q::Camera.new()
-    h_scale = Gtk::Scale.new_with_range(Gtk::Orientation::HORIZONTAL, 1.0, 10.0, 0.1)
+  w.resize(400,400)
+  c=Q::Camera.new()
+  w.add(c.widget)
+  w.show_all()
 
-    v.pack_start(h_scale, false,false,1)
-    v.pack_start(camera, true,true, 1)     
-    v.pack_start(snap, false,false,1)
-    
-    @win.add(v)
-    
-    @win.resize(400,400)  
-    @win.show_all()
-
-    camera.captured.connect() do
-      puts "OK"
-    end 
-
-    snap.clicked.connect() do
-      camera.capture("./test.png")
-    end
-
-    h_scale.value_changed.connect() do
-      @camera.zoom = :float.h_scale.get_value()
-    end
-    
-    @win.delete_event.connect() do Gtk.main_quit() end
-
-    GLib::Timeout.add(1000) do
-      camera.zoom = 3.0
-      camera.record("./test2.mpg")
-      GLib::Timeout.add(10000) do
-        camera.stop()
-      end
-      return false
-    end
+  c.ready.connect() do
+    c.capture("./test.png")
   end
 
-	def self.main(args: :string[])
-		Gst.init(:ref.args); 
-		Gtk.init(:ref.args);
-   
-    app = Main.new();
+  w.delete_event.connect() do
+    c.stop()
+    
+    GLib::Idle.add() do
+      Gtk.main_quit()
+      next false
+    end
 
-		Gtk.main();
-	end
+    next false
+  end
+
+  c.saved.connect() do |t|
+    puts "Camera saved: #{t}."
+  end
+
+  GLib::Timeout.add(3000) do
+    c.record("./test.mpg")
+
+    GLib::Timeout.add(6000) do
+      c.stop()
+
+      next false
+    end
+    
+    next false
+  end
+
+  Gtk.main()
 end

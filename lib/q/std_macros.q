@@ -29,7 +29,7 @@ namespace module Q
   macro :idle,    'GLib.Idle.add('
 
   macro; def cc_time()
-    Q::eval(:'string', 'Time.now.to_s')
+    Q::eval(:'string', 'Time::now.to_s')
   end
 
   delegate; def read_dir_cb(f:string); end
@@ -200,7 +200,7 @@ namespace module Q
       end
     end
 
-    def iterator() :'Q.Env.Iterator'
+    def iterator() :Q::Env::Iterator
       return Q::Env::Iterator.new()
     end
 

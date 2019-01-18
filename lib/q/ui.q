@@ -3,7 +3,7 @@ Q::package(:"gtk+-3.0")
 namespace module Q
   namespace module UI
     class QApp < Gtk::Application
-      @window = :'Gtk.ApplicationWindow'
+      @window = :Gtk::ApplicationWindow
 
       delegate;def activate_cb(app:QApp); end
       @on_activate = :activate_cb
