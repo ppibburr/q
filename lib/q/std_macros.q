@@ -163,7 +163,11 @@ namespace module Q
 
     macro :monitor, 'new Q.File.Monitor(%v1_Q__File__monitor, ', 'Q/file/monitor.q'
     macro :created, 'new Q.File.Monitor(%v1_Q__File__created).created(', 'Q/file/monitor.q'
-    macro :deleted, 'new Q.File.Monitor(%v1_Q__File__deleted).deleted(', 'Q/file/monitor.q'    
+    macro :deleted, 'new Q.File.Monitor(%v1_Q__File__deleted).deleted(', 'Q/file/monitor.q'
+
+    macro; def basename(f)
+      `GLib.File.new_for_path(#{f}).get_basename()`
+    end 
   end
 
   macro; def read(f)

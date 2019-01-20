@@ -1,8 +1,8 @@
 require "Q"
 using Q
+
 Q::package(:'libsoup-2.4')
 Q::flags(:'--thread')
-
 
 namespace module Quincy
   class MimeTypeQuery

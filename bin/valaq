@@ -63,6 +63,12 @@ h=opts
   opts.on("--pconfig-dir LOCATION", "specify location to install .pc files. only valid with `--install-gir`") do |v|
     options[:pc_dir] = v
   end            
+
+  opts.on("--[no-]transpile", "transpiles only") do |v|
+    options[:transpile] = v
+    options[:compile] = false
+    options[:remove] = false
+  end  
   
   opts.on("--[no-]compile", "compiles") do |v|
     options[:compile] = v
@@ -205,9 +211,12 @@ perform f, $reqs=reqs = []
 if options[:gir]
   secondary_arguments.insert(0, "--gir=#{options[:gir]}.gir --header=#{z=options[:gir].split("-")[0].downcase}.h --library #{options[:gir]} -o lib#{z}.so")
 end
-p secondary_arguments
+
+src_dir = "./q_generated/#{File.basename($prog).split(".q")[0]}"
+cmd="valac -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
+
 if options[:compile]
-  STDOUT.puts cmd="valac -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
+  STDOUT.puts cmd
   exit(1) unless system(cmd)
   system "rm -rf q_generated/#{File.basename($prog).split(".q")[0]}" if options[:remove]
  
@@ -216,8 +225,9 @@ if options[:compile]
       system "mkdir -p #{pth}"
     end
     
-    puts cmd = "g-ir-compiler --shared-library=#{q=options[:gir].split("-")[0].downcase} #{options[:gir]}.gir -o #{options[:gir]}.typelib" 
-    exit(1) unless system(cmd)
+    puts cmd_gir = "g-ir-compiler --shared-library=#{q=options[:gir].split("-")[0].downcase} #{options[:gir]}.gir -o #{options[:gir]}.typelib" 
+    exit(1) unless system(cmd_gir)
+    cmd+="\n"+cmd_gir
     system "mv #{options[:gir]}.typelib #{BUILD_TYPELIB_PATH}/"
     system "mv #{options[:gir]}.gir #{BUILD_GIR_PATH}/"
     system "mv ./lib#{q}.so #{BUILD_LIB_PATH}/"
@@ -259,6 +269,11 @@ p #{options[:gir].split("-")[0]}
   if options[:exec]
     system "./#{File.basename(f.gsub(/\.q$/,''))}"
   end
+end
+
+if File.exist?(src_dir)
+  File.open(cf=src_dir+"/compile.sh","w") do |f| f.puts(cmd) end
+  `chmod 755 #{cf}`
 end
 
 if options[:install_gir]

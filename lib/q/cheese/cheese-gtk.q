@@ -6,7 +6,6 @@ namespace module CheeseGtk
     @viewport_layout_manager = :Clutter::BinLayout
     
     :Clutter::Actor[@video_preview, @viewport_layout, @background_layer] 
-    :Clutter::Text[@countdown_layer, @error_layer, @timeout_layer]
     
     def self.new()
       clutter_builder  = Clutter::Script.new();
@@ -16,12 +15,9 @@ namespace module CheeseGtk
 
       @video_preview           = :Clutter::Actor     > clutter_builder.get_object("video_preview")
       @viewport_layout         = :Clutter::Actor     > clutter_builder.get_object("viewport_layout")
-      @viewport_layout_manager = :Clutter::BinLayout > clutter_builder.get_object("viewport_layout_manager")
-      @countdown_layer         = :Clutter::Text      > clutter_builder.get_object("countdown_layer")
       @background_layer        = :Clutter::Actor     > clutter_builder.get_object("background")
-      @error_layer             = :Clutter::Text      > clutter_builder.get_object("error_layer")
-      @timeout_layer           = :Clutter::Text      > clutter_builder.get_object("timeout_layer")
-
+      @viewport_layout_manager = :Clutter::BinLayout > clutter_builder.get_object("viewport_layout_manager")
+      
       video_preview.request_mode = Clutter::RequestMode::HEIGHT_FOR_WIDTH;
       
       viewport.add_child(background_layer);
@@ -43,13 +39,13 @@ namespace module CheeseGtk
       viewport.allocation_changed.connect() do |actor, box, flags|
         viewport_layout.set_size(viewport.width, viewport.height);
         background_layer.set_size(viewport.width, viewport.height);
-        timeout_layer.set_position(video_preview.width/3 + viewport.width/2, viewport.height-20);
       end
     end
 
     signal; def camera_ready(); end
   end
 end
+
 __END__
 
 [
@@ -73,45 +69,16 @@ __END__
   "width":768,
   "height":1024
 },
-{
-  "id": "countdown_layer",
-  "type": "ClutterText",
-  "child::x-align": "CLUTTER_BIN_ALIGNMENT_CENTER",
-  "child::y-align": "CLUTTER_BIN_ALIGNMENT_CENTER",
-  "text": "1",
-  "font-name": "Sans 150px",
-  "opacity": 0,
-  "color": "White"
-},
-{
-  "id": "error_layer",
-  "type": "ClutterText",
-  "child::x-align": "CLUTTER_BIN_ALIGNMENT_CENTER",
-  "child::y-align": "CLUTTER_BIN_ALIGNMENT_CENTER",
-  "color": "White",
-  "visible": false
-},
-{
-  "id": "timeout_layer",
-  "type": "ClutterText",
-  "color": "White",
-  "font-name": "Sans bold 15px",
-  "x": 0,
-  "y": 0,
-  "width":100,
-  "height":20,
-  "visible": false
-},
+
 {
   "id": "viewport_layout",
   "type": "ClutterActor",
   "children":
   [
-    'video_preview',
-    'countdown_layer',
-    'error_layer'
+    'video_preview'
   ]
 },
+
 {
   "id": "viewport_layout_manager",
   "type": "ClutterBinLayout"

@@ -2116,7 +2116,8 @@ end
     class Return < Base
       handles Q::Ast::Return
       def build_str ident = 0
-        get_indent(ident) + "return (#{subast[0].build_str()})"
+        return get_indent(ident) + "return (#{subast[0].build_str()})" if subast[0].build_str() != ""
+        return get_indent(ident) + "return"
       end
     end
     
