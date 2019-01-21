@@ -146,6 +146,8 @@ namespace module Q
       return ss
     end
 
+    MODE_EXE = 509
+
     macro; def write(f, b);   GLib::FileUtils.set_contents(f, b, -1); end    
     macro; def chmod(f, m);   GLib::FileUtils.chmod(f, m);  end
     macro; def delete(f);     GLib::FileUtils.remove(f);    end
@@ -153,6 +155,13 @@ namespace module Q
     macro; def symlink(a, b); GLib::FileUtils.symlink(a,b); end
     macro; def directory(f);  GLib::FileUtils.test(f, GLib::FileTest::IS_DIR); end
     macro; def exist(f);      GLib::FileUtils.test(f, GLib::FileTest::EXISTS); end
+    macro; def executable(f); GLib::FileUtils.test(f, GLib::FileTest::IS_EXECUTABLE); end
+
+    def preserve_write(path:string, data:string)
+      exe = Q::File.executable?(path)
+      Q::File.write(path, data)
+      Q::File.chmod(path, MODE_EXE) if exe
+    end
 
     macro; def join()
       buff=:string[]

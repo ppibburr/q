@@ -283,8 +283,11 @@ namespace module QEdit
       if file == nil
         prompt_save()
       else
+        exe = Q::File.executable?(file)
+        puts "File is EXECUTABLE" if exe
         puts "SAVED: #{file}"
         Q::File.write(file, buffer.text)
+        Q::File.chmod(file, 509) if exe
       end
     end
 
