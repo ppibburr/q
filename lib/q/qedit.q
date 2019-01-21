@@ -1,6 +1,7 @@
 Q::package(:'gtksourceview-3.0', :'vte-2.91')
-
+Q::flags(:'-X -Wno-deprecated-declarations', :'-X -Wno-pointer-to-int-cast')
 require "Q"
+require "Q/qui"
 
 namespace module QEdit
   class EditView < Gtk::SourceView
@@ -262,6 +263,9 @@ namespace module QEdit
 		                                             Gtk::ResponseType::CANCEL,
 		                                             Gtk::Stock::SAVE,
 		                                             Gtk::ResponseType::ACCEPT)
+
+      dlg.do_overwrite_confirmation = true
+      
       dlg.set_modal(true)
       
       dlg.response.connect() do |int|
@@ -426,7 +430,7 @@ namespace module QEdit
       box = Gtk::Box.new(Gtk::Orientation::VERTICAL, 0)
       box.pack_start(toolbar, false,false,0)
       box.pack_start(editor, true, true, 0)
-      
+
       connect_events()
 
       self.title = "QEdit - New Document"
@@ -440,25 +444,25 @@ namespace module QEdit
       
       toolbar.get_style_context().add_class(Gtk.STYLE_CLASS_PRIMARY_TOOLBAR);
 
-		  new_button = Gtk::ToolButton.new_from_stock(Gtk::Stock::NEW);
+		  new_button = QUI::ToolButton.new_from_stock(QUI::Stock::NEW);
 		  toolbar.add(new_button);
       new_button.clicked.connect() do
         editor.add_view()
       end
 
-      open_button = Gtk::ToolButton.new_from_stock(Gtk::Stock::OPEN);
+      open_button = QUI::ToolButton.new_from_stock(QUI::Stock::OPEN);
 		  toolbar.add(open_button)
 		  open_button.clicked.connect() do
 		    editor.prompt_open()
 		  end
 
-      save_button = Gtk::ToolButton.new_from_stock(Gtk::Stock::SAVE);
+      save_button = QUI::ToolButton.new_from_stock(QUI::Stock::SAVE);
 		  toolbar.add(save_button)
       save_button.clicked.connect() do
         editor.save_file()
       end
 
-      save_as_button = Gtk::ToolButton.new_from_stock(Gtk::Stock::SAVE_AS);
+      save_as_button = QUI::ToolButton.new_from_stock(QUI::Stock::SAVE_AS);
 		  toolbar.add(save_as_button)
       save_as_button.clicked.connect() do
         editor.prompt_save()
@@ -466,13 +470,13 @@ namespace module QEdit
 
       toolbar.add(Gtk::SeparatorToolItem.new())
       
-      config_button = Gtk::ToolButton.new_from_stock(Gtk::Stock::PREFERENCES);
+      config_button = QUI::ToolButton.new_from_stock(QUI::Stock::PREFERENCES);
 		  toolbar.add(config_button)
 
-      notes_button = Gtk::ToolButton.new_from_stock(Gtk::Stock::INFO);
+      notes_button = QUI::ToolButton.new_from_stock(QUI::Stock::INFO);
 		  toolbar.add(notes_button)
 
-      terminal_button = Gtk::ToolButton.new_from_stock(Gtk::Stock::EXECUTE);
+      terminal_button = QUI::ToolButton.new_from_stock(QUI::Stock::EXECUTE);
 		  toolbar.add(terminal_button)      
 
       l = "terminal"
@@ -543,7 +547,7 @@ namespace module QEdit
       
       toolbar.add(Gtk::SeparatorToolItem.new())      
       
-      quit_button = Gtk::ToolButton.new_from_stock(Gtk::Stock::QUIT);
+      quit_button = QUI::ToolButton.new_from_stock(QUI::Stock::QUIT);
 		  toolbar.add(quit_button)
 		  
 		  quit_button.clicked.connect() do
