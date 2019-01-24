@@ -139,13 +139,7 @@ namespace module Q
     end
   end
 
-  namespace module File
-    def self.read(f:string)
-      ss = :string?
-      FileUtils.get_contents(f, :out.ss)
-      return ss
-    end
-
+  class File
     MODE_EXE = 509
 
     macro; def write(f, b);   GLib::FileUtils.set_contents(f, b, -1); end    
@@ -156,12 +150,7 @@ namespace module Q
     macro; def directory(f);  GLib::FileUtils.test(f, GLib::FileTest::IS_DIR); end
     macro; def exist(f);      GLib::FileUtils.test(f, GLib::FileTest::EXISTS); end
     macro; def executable(f); GLib::FileUtils.test(f, GLib::FileTest::IS_EXECUTABLE); end
-
-    def preserve_write(path:string, data:string)
-      exe = Q::File.executable?(path)
-      Q::File.write(path, data)
-      Q::File.chmod(path, MODE_EXE) if exe
-    end
+    macro; def is_symlink(f); GLib::FileUtils.test(f, GLib::FileTest::IS_SYMLINK); end
 
     macro; def join()
       buff=:string[]
@@ -170,17 +159,121 @@ namespace module Q
       return ret
     end
 
-    macro :monitor, 'new Q.File.Monitor(%v1_Q__File__monitor, ', 'Q/file/monitor.q'
-    macro :created, 'new Q.File.Monitor(%v1_Q__File__created).created(', 'Q/file/monitor.q'
-    macro :deleted, 'new Q.File.Monitor(%v1_Q__File__deleted).deleted(', 'Q/file/monitor.q'
+    macro :dir_monitor, 'new Q.File.Monitor(%v1_Q__File__monitor, ', 'Q/file/monitor.q'
+    macro :dir_monitor_created, 'new Q.File.Monitor(%v1_Q__File__created).created(', 'Q/file/monitor.q'
+    macro :dir_monitor_deleted, 'new Q.File.Monitor(%v1_Q__File__deleted).deleted(', 'Q/file/monitor.q'
+   
+    attr_reader path_name:string      
+          
+    enum module IOMode
+      READ
+      WRITE
+      APPEND
+      READ_WRITE
+    end
+    
+    delegate; def open_cb(f: :Q::File); end
+    
+    def self.open(path: :string, mode: :IOMode?, cb: :open_cb?) :Q::File
+      return Q::File.new(path, mode, cb)
+    end    
+    
+    def self.__read(f:string)
+      ss = :string?
+      FileUtils.get_contents(f, :out.ss)
+      return ss
+    end     
+    
+    Q.ifdefpkg :'gio-2.0'    
+      macro; def basename(f)
+        `GLib.File.new_for_path(#{f}).get_basename()`
+      end 
+      
+      attr_reader gfile: :GLib::File       
+    
+      def self.get_etag_for_path(path:string) :string
+        return "%s".printf(`GLib.File.new_for_path(path).query_info("*",FileQueryInfoFlags.NOFOLLOW_SYMLINKS,null).get_etag()`)
+      end
+      
+      def self.is_modified(path:string, etag: :string) :bool
+        return etag != get_etag_for_path(path)
+      end
 
-    macro; def basename(f)
-      `GLib.File.new_for_path(#{f}).get_basename()`
-    end 
+      attr_reader io: :FileIOStream?
+      attr_reader etag:string
+
+      attr_reader output_stream: :OutputStream?
+      attr_reader input_stream:  :InputStream?  
+
+      def self.new(path: :string?, mode: :IOMode?, cb: :open_cb?)
+        @_path_name = path
+        @_gfile     = `GLib.File.new_for_path(path)` if path != nil 
+        @_etag      = get_etag_for_path(path)
+        
+        @_input_stream  = gfile.read()                                     if mode == IOMode::READ
+        @_output_stream = gfile.replace(@_etag, false, GLib::FileCreateFlags::NONE) if mode == IOMode::WRITE
+        @_output_stream = gfile.append_to(GLib::FileCreateFlags::NONE)     if mode == IOMode::APPEND
+        
+        if mode == IOMode::READ_WRITE
+          @_io             = gfile.open_readwrite()
+          @_input_stream  = io.input_stream
+          @_output_stream = io.output_stream
+        end
+        
+        if cb != nil
+          cb(self)
+          input_stream.close() if input_stream   != nil
+          output_stream.close() if output_stream != nil
+        end    
+        
+        refresh()
+      end
+      
+      def puts(txt:string) :ssize_t
+        len = output_stream.write("#{txt}\n".data)
+        refresh()
+        return len
+      end
+      
+      def monitor() :bool
+        if Q::File.is_modified?(path_name, etag); modified(); return true end
+        if !Q::File.exist?(path_name);  deleted(); return true  end
+        return false
+      end
+      
+      def refresh() :string
+        @_etag = Q::File.get_etag_for_path(path_name)
+        deleted() if !Q::File.exist?(path_name)
+        return etag
+      end
+    Q.elsdef :'gio-2.0'
+      def self.new(path: :string?, mode: :IOMode?, cb: :open_cb?)
+        @_path_name = path
+        cb(self) if cb != nil
+      end
+      
+      def puts(txt:string)
+        Q::File.write(path_name, "#{txt}\n")
+      end    
+    Q.defend :'gio-2.0'
+    
+      
+     def read() :string
+       return Q::File.__read(path_name)
+     end    
+    
+     def preserve_write(path:string, data:string)
+       exe = Q::File.executable?(path)
+       Q::File.write(path, data)
+       Q::File.chmod(path, MODE_EXE) if exe
+     end
+     
+     signal; def deleted(); end
+     signal; def modified(); end
   end
 
   macro; def read(f)
-    Q::File.read(f)
+    Q::File.new(f).read()
   end
 
   macro; def ENV(n)

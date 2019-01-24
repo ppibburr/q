@@ -2,6 +2,7 @@ Q::package(:"libusb-1.0")
       
 namespace module Q
   class USB
+  
     delegate; def device_iter(d: :LibUSB::Device?); end
   
     def self.devices(cb:device_iter)

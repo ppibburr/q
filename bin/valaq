@@ -5,6 +5,8 @@ def p *o
   o[0]
 end
 
+# TREE
+
 def puts *o
   super if $V
   o[0]
@@ -183,6 +185,7 @@ def perform f, reqs=[]
   STDOUT.puts "Transpile: #{f} ..."
   
   code = open(f).read
+  
   ast = $ast = Q.build(code, f)
 
   ast.parented nil
@@ -213,7 +216,11 @@ if options[:gir]
 end
 
 src_dir = "./q_generated/#{File.basename($prog).split(".q")[0]}"
-cmd="valac -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
+defs = ""
+pkgs = $V_ARGV.join(" ").scan(/\-\-pkg (.*? |.*)/).flatten.each do |pk|
+  defs << "-D Q_PKG_" << pk.gsub(/\.|\-/,'_').upcase
+end
+cmd="valac #{defs} -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
 
 if options[:compile]
   STDOUT.puts cmd

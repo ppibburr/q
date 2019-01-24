@@ -1,16 +1,21 @@
 #  :Goo[]?
 #
-
+# 4
 $: << File.dirname(__FILE__)
 require "source_generator"
 
 def add_package p
-  $V_ARGV << "--pkg #{p}" unless $V_ARGV.index("--pkg #{p}")
+  $V_ARGV.push("--pkg", "#{p}") unless $V_ARGV.index("#{p}")
 end
 
 def add_flag f
   $V_ARGV << "#{f}" unless $V_ARGV.index("#{f}")
 end
+
+def has_pkg(p)
+  !!$V_ARGV.index("#{p}")
+end
+
 
 module Q
   def self.at_exit
@@ -144,7 +149,7 @@ module Q
       end
 
       def macro_vcall n
-        if n=~/^\%/
+        if n =~ /^\%/
          # md = (macro_declares[n] ||= n)
         end
       
@@ -237,10 +242,11 @@ module Q
           end
 
           str = c.build_str(ident+2)
+          str = str.gsub(";", '') if str.strip =~ /^\#/
           str = "" if ["\n", ";", ";\n", ""].index str.strip
           (c.marked_prepend_newline? ? "\n" : "") +
           str +
-          ((c.marked_semicolon? and str != "") ? ";" : "") +
+          ((c.marked_semicolon? and str != "" and str.strip !~ /^\#/) ? ";" : "") +
           (c.marked_newline? ? "\n" : "") +
           (c.marked_extra_newline? ? "\n" : "") +
           (hc ? write_comment(c.node.line,0).gsub(/\n$/,'') + s : "") +
@@ -693,6 +699,41 @@ p s
         @body = ''
         super ident, nil
       end
+
+      ifdefp=MACROS['Q.ifdefpkg'] = Macro.new('')
+      def ifdefp.perform(ident, ast)
+        s=ast.subast[0].build_str.gsub(";",'');
+
+        @body = "#if Q_PKG_#{s.gsub(/\.|\-/,"_").upcase}"
+        puts PKG: @body
+       
+        super(ident, nil).gsub(";",'');
+      end
+      
+      ifdef=MACROS['Q.ifdef'] = Macro.new('')
+      def ifdef.perform(ident, ast)
+        s=ast.subast[0].build_str.gsub(";",'');
+        @body = "#if #{s}"
+        super(ident, nil).gsub(";",'');
+      end
+      
+      elsdef=MACROS['Q.elsdef'] = Macro.new('')
+      def elsdef.perform(ident, ast)
+        @body = "#else"
+        super ident, nil
+      end              
+       
+      enddef=MACROS['Q.defend'] = Macro.new('')
+      def enddef.perform(ident, ast)
+        @body = "#endif".gsub(";",'');
+        super ident, nil
+      end    
+      
+      hp=MACROS['Q.have_pkg'] = Macro.new('')
+      def hp.perform(ident, ast)
+        @body = "#{has_pkg(ast.subast[0].build_str)}"
+        super ident, nil
+      end         
        
       em=MACROS['Q.eval'] = Macro.new('')
       def em.perform(ident, ast)
@@ -804,7 +845,8 @@ p s
           ''
         elsif macro = MACROS[subast[0].symbol]
           mark_semicolon false
-          macro.perform(ident, subast[1])
+          marked_semicolon false
+          macro.perform(ident, subast[1]).gsub(/[ ]+\;[ ]+\n/,'')
         elsif (s=subast[0].symbol) != "construct"
           "#{t}#{s}(#{subast[1].build_str})"
         end
@@ -2821,9 +2863,17 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
         mark_newline true
      
         mark_prepend_newline true
-        (t = get_indent(ident)) +
+        s = (t = get_indent(ident)) +
         subast.shift.build_str(ident) +
         write_body(ident).gsub(/\(.*?\=\> \{/, ' {').gsub(/\}\);.*?$/,"}\n").gsub("};","}")
+
+        if s =~ /^ *?owned;/
+          if s =~ / get \{/
+            s=s.gsub("get {", "owned get {")
+          end
+        end
+        
+        s.gsub(/^ *?owned\;/,'')
       end
     end      
     

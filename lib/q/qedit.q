@@ -1,26 +1,106 @@
 Q::package(:'gtksourceview-3.0', :'vte-2.91')
 Q::flags(:'-X -Wno-deprecated-declarations', :'-X -Wno-pointer-to-int-cast')
+
 require "Q"
 require "Q/qui"
 
 namespace module QEdit
+  class Session
+    def self.restore(editor:Editor)
+      files = Q::read(editor.session).split("\n")
+
+      editor.each_view() do |v|
+        if !(`v.edit_view.path_name in files`)
+          editor.close_view(v)
+        end
+      end
+      
+      files.each do |f| editor.open_file(f) end 
+    end
+
+    def self.clear(editor:Editor)
+      Q::File.write(editor.session, "")
+    end
+    
+    def self.save(editor:Editor)
+      list = ""
+      
+      for i in 0..(editor.book.get_n_pages()-1)
+        list << "\n" if i > 0
+        list << editor.get_nth_view(i).edit_view.path_name
+      end
+      
+      Q::File.write(editor.session, list)
+    end
+  end
+
+  class WordProvider
+    @keyword_complete = :Gtk::SourceCompletionWords
+    @buffer           = :Gtk::SourceBuffer
+    
+    def self.new(words:string)
+      @buffer = Gtk::SourceBuffer.new(nil)
+
+      self.words = words
+
+      @keyword_complete = Gtk::SourceCompletionWords.new('keyword', nil)
+      keyword_complete.register(buffer)
+    end
+    
+    def attach(view:EditView)
+      view.get_completion().add_provider(keyword_complete)
+    end
+
+    property words:string do
+      get do :owned
+        return buffer.text
+      end
+
+      set do
+        buffer.begin_not_undoable_action()
+        buffer.set_text(value)
+        buffer.end_not_undoable_action()
+      end 
+    end
+
+    `private static WordProvider? _q;`
+    def self.q() :WordProvider
+      `_q = new WordProvider(Q_KEYWORDS)` if _q == nil
+      return _q
+    end
+  end
+
+  Q_KEYWORDS = "EditView EditWidget Source SourceView SourceCompletionProvider SourceBuffer SourceSearchContext signal delegate async virtual override abstract hide namespace module class enum struct for def if end __FILE__ DATA GLib Gtk Gdk File Hash Window Button Toolbar ToolButton Box DrawingArea system read open Label property attr_reader attr_writer attr_accessor each in new initialize send FileUtils chmod mkdir write WebKit WebView WebFrame Frame Pane Notebook add set get"
+  #
   class EditView < Gtk::SourceView
     @buffer    = :Gtk::SourceBuffer
     @search    = :Gtk::SourceSearchContext
     @line_mark = :Gtk::TextMark
+    @file      = :Gtk::SourceFile?
+    @file_modified = false
+    @untitled      = true
+
+    attr_reader autocomplete: :Gtk::SourceCompletionWords
     
-    `private string? _file;`
-    property file: :string? do
-      get do return @_file end
-      set do load_file(value) end
+    property path_name:string do
+      get do :owned; return @file.location.get_path() end
+      set do @file.set_location(`GLib.File.new_for_path(value)`) end
     end
     
     def initialize()
       @buffer    = :Gtk::SourceBuffer > get_buffer()
       @search    = Gtk::SourceSearchContext.new(buffer, nil)
       @line_mark = Gtk::TextMark.new(nil, true)
+      @file      = Gtk::SourceFile.new()
 
       search.set_highlight(true)
+
+      @_autocomplete = Gtk::SourceCompletionWords.new('main', nil)
+      @_autocomplete.register(buffer)
+
+      get_completion().add_provider(@_autocomplete)      
+
+      WordProvider.q().attach(self)
 
       self.show_line_numbers = true
       self.insert_spaces_instead_of_tabs = true
@@ -38,7 +118,36 @@ namespace module QEdit
 
     def connect_keys()
       key_press_event.connect() do |event|
-        puts "Editor KEY_PRESS: #{event.key.keyval}"
+        if (event.key.state == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))
+          if event.key.keyval == 83
+            prompt_save()
+            next true
+          end  
+         
+          if event.key.keyval == 82
+            iter = :Gtk::TextIter
+      
+            buffer.get_iter_at_offset(:out.iter, buffer.cursor_position)
+            line = iter.get_line()
+        
+            load_file(@path_name)
+          
+            GLib::Timeout.add(600) do
+              go_to(line+1)
+                
+              GLib::Timeout.add(200) do
+                place_cursor_onscreen()
+                  
+                next false
+              end
+                 
+              next false
+            end  
+
+            next true
+          end
+        end
+        
         if (event.key.state == Gdk::ModifierType::CONTROL_MASK)
           if event.key.keyval == 115
             save_file()
@@ -55,6 +164,7 @@ namespace module QEdit
             next true;
           end
         end
+        
         next false
       end
     end
@@ -111,28 +221,99 @@ namespace module QEdit
       return contains
     end
 
-    def load_file(path:string)
-      @_file = path
-    
-      buffer.language = Gtk::SourceLanguageManager.new().get_language('ruby')
-      buffer.highlight_syntax = true
+    def load_file(path:string)          
+      @file.location = `GLib.File.new_for_path(path)`
+      @untitled      = false
+      
+      puts "load: #{path_name}"
+      
+		  buffer.set_modified(false);	
+			
+			Gtk::SourceFileLoader.new(buffer, file).load_async.begin(GLib::Priority::DEFAULT, nil) do      
+        set_lang()
 
-      return if !Q::File.exist?(path)
-
-      buffer.text = Q::read(path)
+        file_loaded(path)
+			end
     end
 
     def set_font(desc:string)
       override_font(Pango::FontDescription.from_string(desc))# if args[:font]
     end
+    
+    def prompt_save()
+      dlg = Gtk::FileChooserDialog.new("Save file ...", nil, Gtk::FileChooserAction::SAVE,
+		                                             Gtk::Stock::CANCEL,
+		                                             Gtk::ResponseType::CANCEL,
+		                                             Gtk::Stock::SAVE,
+		                                             Gtk::ResponseType::ACCEPT)
+
+      dlg.do_overwrite_confirmation = true
+      
+      dlg.set_modal(true)
+      
+      dlg.response.connect() do |int|
+        if int == Gtk::ResponseType::ACCEPT
+          @path_name = dlg.get_filename()
+          @untitled  = false
+          
+          puts "SaveAs: #{dlg.get_filename()}"
+          
+          set_lang()
+          save_file()
+          file_saved()
+        end
+        
+        dlg.destroy()
+      end
+      
+      dlg.show()
+    end
+
+    def save_file()
+      if @untitled
+        prompt_save()
+        
+        return
+      else
+        file_saver  = Gtk::SourceFileSaver.new(buffer, file);
+			  
+			  buffer.set_modified(false);
+
+			  file_saver.save_async.begin(GLib::Priority::DEFAULT, nil) do
+				  file_saved()
+			  end;
+        
+        @untitled = false
+        
+        puts "SAVED: #{@path_name}"
+      end
+    end   
+    
+    def set_lang()
+      l    = Gtk::SourceLanguageManager.new();
+		  lang = l.guess_language(@path_name, nil);
+		  
+		  if lang != nil
+			  buffer.language = lang;
+			  buffer.highlight_syntax = true;
+		  elsif (lang == nil) && (@path_name=~/.*?\.q/)
+		    buffer.language = l.get_language("ruby")
+			  buffer.highlight_syntax = true;
+		  else
+			  buffer.highlight_syntax = false;
+		  end    
+    end 
 
     signal; def show_find(); end
-    signal; def save_file(); end
     signal; def show_goto(); end
+    signal; def file_saved(); end
+    signal; def file_loaded(file:string); end
+    signal; def file_externally_modified(); end
   end
 
   class EditWidget < Gtk::ScrolledWindow
     @edit_view = :EditView
+    
     def initialize()
       @edit_view = EditView.new()
 
@@ -147,11 +328,14 @@ namespace module QEdit
     @book     = :Gtk::Notebook
     @stack    = :Gtk::Stack
     @terminal = :Vte::Terminal
+    @providers = :'Q.Hash<string, WordProvider?>'
     
     def initialize()
       @book     = Gtk::Notebook.new()
       @stack    = Gtk::Stack.new()
       @terminal = Vte::Terminal.new()
+      @providers = `new Q.Hash<string, WordProvider?>()` 
+       
        
       book.set_scrollable(true)
        
@@ -193,8 +377,7 @@ namespace module QEdit
       init_terminal()
       
       terminal.key_press_event.connect() do |event|
-        puts event.key.keyval
-        if (event.key.state == Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK)
+        if (event.key.state == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))
           if event.key.keyval == 86
             terminal.paste_clipboard()
             next true
@@ -210,10 +393,9 @@ namespace module QEdit
       end
       
       key_press_event.connect() do |event|
-        puts event.key.keyval
-        if (event.key.state == Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK)
-          if event.key.keyval == 83
-            prompt_save()
+        if (event.key.state == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))          
+          if event.key.keyval == 81
+            save_all()
             next true
           end        
         end
@@ -232,6 +414,13 @@ namespace module QEdit
         end
 
         next false
+      end
+
+      book.switch_page.connect() do
+        GLib::Idle.add() do
+          view_changed()
+          next false
+        end
       end
     end
 
@@ -257,46 +446,8 @@ namespace module QEdit
       dlg.show()    
     end
 
-    def prompt_save()
-      dlg = Gtk::FileChooserDialog.new("Save file ...", nil, Gtk::FileChooserAction::SAVE,
-		                                             Gtk::Stock::CANCEL,
-		                                             Gtk::ResponseType::CANCEL,
-		                                             Gtk::Stock::SAVE,
-		                                             Gtk::ResponseType::ACCEPT)
-
-      dlg.do_overwrite_confirmation = true
-      
-      dlg.set_modal(true)
-      
-      dlg.response.connect() do |int|
-        if int == Gtk::ResponseType::ACCEPT
-          current.edit_view.file = dlg.get_filename()
-          puts "SaveAs: #{dlg.get_filename()}"
-          save_file()
-          view_changed()
-          set_tab_label(current, Q::File.basename(self.file))
-        end
-        
-        dlg.destroy()
-      end
-      
-      dlg.show()
-    end
-
-    def save_file()
-      if file == nil
-        prompt_save()
-      else
-        exe = Q::File.executable?(file)
-        puts "File is EXECUTABLE" if exe
-        puts "SAVED: #{file}"
-        Q::File.write(file, buffer.text)
-        Q::File.chmod(file, 509) if exe
-      end
-    end
-
     def init_terminal()
-      argv = :string["/bin/bash", "-e"]
+      argv = :string["/bin/bash", "-i"]
       @terminal.spawn_sync(Vte::PtyFlags::DEFAULT, "./", argv, nil, 0, nil, nil)
     end
 
@@ -305,12 +456,15 @@ namespace module QEdit
       
       widget.edit_view.buffer.changed.connect() do changed() end
       widget.edit_view.show_find.connect() do show_find() end
-      widget.edit_view.save_file.connect() do save_file() end
       widget.edit_view.show_goto.connect() do show_goto() end
+      widget.edit_view.file_saved.connect() do 
+        set_tab_label(widget, Q::File.basename(widget.edit_view.path_name))
+        view_changed()
+      end
 
       box   = Gtk::Box.new(Gtk::Orientation::HORIZONTAL, 0)
       close = Gtk::Button.new();
-      label = Gtk::Label.new("Untitled.txt");
+      label = Gtk::Label.new("Untitled Document");
       
       close.image = Gtk::Image.new_from_icon_name("gtk-close", Gtk::IconSize::MENU)
       close.clicked.connect() do
@@ -326,36 +480,88 @@ namespace module QEdit
       book.show_all()
       book.page = -1
 
-      book.switch_page.connect() do
-        GLib::Idle.add() do
-          view_changed()
-          next false
-        end
+      add_completions(widget)
+
+      widget.edit_view.file_loaded.connect() do |path|
+        set_tab_label(widget, Q::File.basename(path))
       end
 
       return widget 
     end
     
     def close_view(view:EditWidget)
+      remove_completions(view)
       view.destroy()
     end
 
     def load_file(path:string)
       current.edit_view.load_file(path)
-      set_tab_label(current, Q::File.basename(path))
     end
     
-    def open_file(path:string)
-      view = get_view_for_path(path)
+    def load_provider(pth:string)
+      return if providers[pth] != nil
+     
+      providers[pth] = WordProvider.new(Q::read(pth))
+     
+      each_view() do |view|
+        providers[pth].attach(view.edit_view)
+      end
+    end
+    
+    def open_file(path:string)        
+      if path=~/(.*?)\.qompletions/
+        pth = $1
+        load_provider(pth)
+        return
+        
+      elsif path=~/session\.(.*)/
+        puts "session: #{$1}"
+
+        if $1 == "restore"
+          Session.restore(self)
+        elsif $1 == "save"
+          Session.save(self)
+        elsif $1 == "clear"
+          Session.clear(self)
+        elsif $1 =~ /set\.(.*)/
+          @session = $1
+        end
+
+        return
+      end
+        
+      view = get_view_for_path(path)  
         
       if view == nil
         view = add_view()
        
         load_file(path)
         book.show_all()
+
       else
         set_view(view)
       end    
+    end
+
+    def add_completions(view:EditWidget)
+      providers.each_pair() do |pth,p|
+        (:WordProvider > p).attach(view.edit_view)
+      end
+      
+      for i in 0..(get_n_views()-1)
+        if i != get_n_views()-1
+          view.edit_view.get_completion().add_provider(get_nth_view(i).edit_view.autocomplete)
+          get_nth_view(i).edit_view.get_completion().add_provider(view.edit_view.autocomplete)
+        end
+      end
+    end
+
+    def remove_completions(view:EditWidget)
+      each_view() do |v|
+        if view != v
+          v.edit_view.get_completion().remove_provider(view.edit_view.autocomplete)
+        end
+      end
     end
     
     def set_font(desc:string)
@@ -370,17 +576,52 @@ namespace module QEdit
       (:Gtk::Label > tab_for_child(c).get_children().nth_data(0)).label = s
     end
 
+    def get_nth_view(i:int)
+      return :EditWidget? > book.get_nth_page(i)
+    end
+    
+    def get_n_views() :int
+      return book.get_n_pages()
+    end 
+    
+    delegate;def each_cb(w:EditWidget); end
+    
+    def each_view(cb:each_cb)
+      for i in 0..(get_n_views()-1)
+        cb(get_nth_view(i))
+      end
+    end
+    
+    def close_all()
+      each_view() do |v|
+        close_view(v)
+      end
+    end
+    
+    def save_all()
+      set_view(get_nth_view(0))
+    
+      GLib::Timeout.add(200) do
+        each_view() do |v|
+          set_view(v)
+          v.edit_view.save_file()
+        end
+        
+        next false
+      end
+    end
+
     def get_view_for_path(path:string) :EditWidget?
-      for i in 0..(book.get_n_pages()-1)
-        return :EditWidget > book.get_nth_page(i) if (:EditWidget > book.get_nth_page(i)).edit_view.file == path
+      for i in 0..(get_n_views()-1)
+        return get_nth_view(i) if get_nth_view(i).edit_view.path_name == path
       end
 
       return nil
     end
     
     def set_view(view:EditWidget)
-      for i in 0..(book.get_n_pages()-1)
-        book.page = i if (:EditWidget > book.get_nth_page(i)) == view
+      for i in 0..(get_n_views()-1)
+        book.page = i if get_nth_view(i) == view
       end    
     end
 
@@ -405,7 +646,13 @@ namespace module QEdit
     end
 
     property file: :string? do
-      get do return current.edit_view.file end
+      get do :owned; return current.edit_view.path_name end
+    end
+    
+    `private string? @_session = "/tmp/q.session";`
+    property session: :string? do
+      get do return @_session end
+      set do @_session = value; Session.restore(self) end
     end
 
     signal; def changed(); end
@@ -459,13 +706,13 @@ namespace module QEdit
       save_button = QUI::ToolButton.new_from_stock(QUI::Stock::SAVE);
 		  toolbar.add(save_button)
       save_button.clicked.connect() do
-        editor.save_file()
+        editor.current.edit_view.save_file()
       end
 
       save_as_button = QUI::ToolButton.new_from_stock(QUI::Stock::SAVE_AS);
 		  toolbar.add(save_as_button)
       save_as_button.clicked.connect() do
-        editor.prompt_save()
+        editor.current.edit_view.prompt_save()
       end
 
       toolbar.add(Gtk::SeparatorToolItem.new())
@@ -580,7 +827,18 @@ namespace module QEdit
 
       @find_widget.activate.connect() do
         editor.current.edit_view.find(@find_widget.text)
-      end    
+      end   
+      
+      key_press_event.connect() do |event|
+        if (event.key.state == Gdk::ModifierType::CONTROL_MASK)
+          if event.key.keyval == 113
+            application.quit()
+            next true
+          end
+        end
+        
+        next false
+      end 
     end
   end
   
@@ -594,9 +852,11 @@ namespace module QEdit
       flags = GLib::ApplicationFlags::HANDLES_OPEN
       _name = name != nil ? name : "org.qedit.application"
       
-      Object(application_id:_name, flags:flags)
+      Object(application_id:_name, flags:flags)      
+      
+      set_option_context_summary(get_help_summary())
 
-      open.connect() do |files,hint|
+      open.connect() do |files,hint|      
         if @window == nil
           @init_files = files
           activate()
@@ -605,6 +865,16 @@ namespace module QEdit
 
         open_files(files)
       end
+    end
+    
+    def get_help_summary()
+      return "  qedit [option]|[files]|[session.<session_command>[.<args>]]|[</path/to/completion/source>.qompletions]     
+
+SESSION_COMMANDS:
+  save     save the session
+  restore  restore the session
+  clear    clear the session
+  set      set session to path <arg>"
     end
     
     override; def activate()
