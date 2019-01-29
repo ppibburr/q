@@ -1437,7 +1437,7 @@ Q.line = node.line if node
         super
         
         if node.super_class
-          @super_class = compiler.handle(node.super_class).build_str
+          @super_class = compiler.handle(node.super_class).build_str.gsub("[", "<").gsub("]", '>')
         end
         
         subast.map do |q| q.parented self end 
@@ -1813,7 +1813,12 @@ Q.line = node.line
         if variable.respond_to?(:kind)
           case variable.kind
           when :instance
-            "#{get_indent(ident)}#{scope.is_a?(Q::Compiler::StructScope)? "" : "this."}"+variable.symbol + do_sets_field + " = #{value.build_str}"
+          # @FLD
+          vs = value.build_str
+          if value.is_a?(ArrayDeclaration)
+            vs = "new "+vs +"[#{value.length}]" if !value.initializer? 
+          end
+            "#{get_indent(ident)}#{scope.is_a?(Q::Compiler::StructScope)? "" : "this."}"+variable.symbol + do_sets_field + " = #{vs}"
           when :local
             if is_declaration?
               get_indent(ident) + declare_field
