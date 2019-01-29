@@ -131,7 +131,7 @@ namespace module Q
   end
 
   macro; def type(v,t)
-    v.type() == `typeof(#{t})`
+    `#{v} is #{t}`
   end
 end
 

@@ -20,10 +20,6 @@ class Q::Require
   end
   
   def ok?
-    if File.exist?(path)
-      return true
-    end
-
     if path == "Q"
       @path = File.join(File.dirname(__FILE__), "..", "std_macros.q")
       return true
@@ -43,10 +39,15 @@ class Q::Require
       end    
     end
     
-    path = @path
+    p = path = @path
     return true if File.exist?(@path=File.expand_path(@path))
     return true if File.exist?(@path=File.expand_path(File.join(File.dirname(Q.filename), path)))    
     return true if File.exist?(@path=File.expand_path(File.join("./", path)))
+    
+    path = p+".q"
+    return true if File.exist?(@path=File.expand_path(@path))
+    return true if File.exist?(@path=File.expand_path(File.join(File.dirname(Q.filename), path)))    
+    return true if File.exist?(@path=File.expand_path(File.join("./", path)))    
   end
 end
 

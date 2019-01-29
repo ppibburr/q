@@ -9,10 +9,11 @@ def puts *o
   super if $V
   o[0]
 end
-
+od = Dir.getwd
+Dir.chdir File.dirname(__FILE__)+"/../"
 require './lib/q'
 require "./lib/q/builder/compilers/vala.rb"
-
+Dir.chdir od
 class << Q
   attr_accessor :line
 end
@@ -35,6 +36,10 @@ h=opts
   opts.on("--valac-command [COMMAND]") do |v|
     options[:valac_command] = v
   end
+  
+  opts.on("--plugin FILE", "Generate a shared-lib *.so file") do |v|
+    options[:plugin] = v
+  end  
   
   opts.on("--introspection NAMESPACE-VERSION", "generate a gir: <NAMESPACE>-<VERSION>.gir") do |v|
     options[:gir] = v
@@ -102,8 +107,8 @@ h=opts
   end 
   
   opts.on("-h", "--help", "Displays this summary" ) do
-    puts opts
-    exit(1)
+    STDOUT.puts opts
+    exit(0)
   end
   
   opts.separator ""
@@ -183,7 +188,7 @@ def perform f, reqs=[]
   $performed << f
   
   reqs << f unless reqs.index f
-  STDOUT.puts "Transpile: #{f} ..."
+  STDOUT.puts "\e[34mTranspile: #{f} ...\e[0m"
   
   code = open(f).read
   
@@ -243,24 +248,30 @@ if options[:gir]
   secondary_arguments.insert(0, "--gir=#{options[:gir]}.gir --header=#{z=options[:gir].split("-")[0].downcase}.h --library #{options[:gir]} -o lib#{z}.so")
 end
 
+if options[:plugin]
+  secondary_arguments.insert(0, "--library #{options[:plugin]} -o lib#{options[:plugin].split("-")[0].downcase}.so")
+end
+
 src_dir = "./q_generated/#{File.basename($prog).split(".q")[0]}"
 defs = ""
 pkgs = $V_ARGV.join(" ").scan(/\-\-pkg (.*? |.*)/).flatten.each do |pk|
   defs << "-D Q_PKG_" << pk.gsub(/\.|\-/,'_').upcase
 end
-cmd="valac #{defs} -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{options[:gir] ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
+cmd="valac #{defs} -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{(options[:gir] || options[:plugin]) ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
 
 if options[:compile]
-  STDOUT.puts cmd
+  STDOUT.puts "\e[1m\e[35m"+cmd+"\e[0m"
   exit(1) unless system(cmd)
   system "rm -rf q_generated/#{File.basename($prog).split(".q")[0]}" if options[:remove]
+
  
   if options[:gir]
     [BUILD_PATH, BUILD_GIR_PATH, BUILD_TYPELIB_PATH, BUILD_LIB_PATH, BUILD_VAPI_PATH, BUILD_INCLUDE_PATH, BUILD_PC_PATH].each do |pth|
       system "mkdir -p #{pth}"
     end
     
-    puts cmd_gir = "g-ir-compiler --shared-library=#{q=options[:gir].split("-")[0].downcase} #{options[:gir]}.gir -o #{options[:gir]}.typelib" 
+    cmd_gir = "g-ir-compiler --shared-library=#{q=options[:gir].split("-")[0].downcase} #{options[:gir]}.gir -o #{options[:gir]}.typelib" 
+    STDOUT.puts "\e[1m\e[35m"+cmd_gir+"\e[0m"
     exit(1) unless system(cmd_gir)
     cmd+="\n"+cmd_gir
     system "mv #{options[:gir]}.typelib #{BUILD_TYPELIB_PATH}/"
