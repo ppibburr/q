@@ -7,7 +7,7 @@ namespace module Q
   
     def self.devices(cb:device_iter)
       context  = :LibUSB::Context
-      dev_list = :'LibUSB.Device?[]'
+      dev_list = :LibUSB::Device?[]
       
       LibUSB::Context.init(:out.context)  
 

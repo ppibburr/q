@@ -1,4 +1,6 @@
 require 'Q'
+Q::package(:'json-glib-1.0')
+
 namespace module JSONSample
   macro; def get(j,n)
     

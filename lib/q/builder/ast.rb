@@ -968,9 +968,7 @@ module Q
       end
       return n
     rescue => e
-      puts e
-      puts e.backtrace.join("\n")
-      Q.parse_error event,line      
+      Q.parse_error event,line, e      
     end
     
     def self.handle_single event, line, *foo
@@ -979,11 +977,10 @@ module Q
 
     end 
     
-    def Q.parse_error event, line
-      puts "#{line}, unsupported #{event}."
-      puts "#{filename}"
-      puts "#{open(filename).read.split("\n")[line-1]}"
-      exit(1)
+    def Q.parse_error event, line, e=nil
+      puts "\n\n" 
+      puts `ruby -c #{filename}`
+      exit
     end 
   end
 end

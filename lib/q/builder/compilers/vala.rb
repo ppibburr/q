@@ -1,6 +1,11 @@
 #  :Goo[]?
 #
 # 4
+class NilClass
+  def line
+    Q.line
+  end
+end
 $: << File.dirname(__FILE__)
 require "source_generator"
 
@@ -14,6 +19,14 @@ end
 
 def has_pkg(p)
   !!$V_ARGV.index("#{p}")
+end
+
+def define_sym s
+  $V_ARGV.push("-D",s.upcase)
+end
+
+def is_def s
+  !!$V_ARGV.index(s)
 end
 
 
@@ -188,7 +201,10 @@ module Q
 
     class Break < Base
       handles Q::Ast::Break
-      def build_str ident=0
+      def build_str ident = 0
+Q.line = node.line
+""
+
         (" "*ident)+"break"
       end
     end
@@ -324,6 +340,9 @@ module Q
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         mark_semicolon false
         get_indent(ident) + subast.map do |q|
           q.build_str.gsub(/^"/,'').gsub(/"$/,'')
@@ -343,6 +362,9 @@ module Q
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         "{"+members.map do |m| m.build_str end.join(", ")+"}"
       end
     end
@@ -395,6 +417,9 @@ module Q
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         if kind == :global and symbol.to_s == "~"
           scope.until_nil do |q|
             if q.is_a?(MethodScope)
@@ -456,6 +481,9 @@ module Q
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         body.map do |s| s.build_str(ident+2) end.join(", ")
       end
     end
@@ -473,6 +501,9 @@ module Q
       
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         "/#{node.value}/#{node.modifier ? node.modifier : ""}"
       end
     end
@@ -495,6 +526,9 @@ module Q
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         if !parent.parent.parent.parent.parent.parent.is_a?(Delegate) and !parent.parent.parent.parent.parent.is_a?(Signal)
           params.map do |p|
             p.name.to_s + ": " + p.type.to_s
@@ -550,7 +584,7 @@ module Q
           ms = ms[0..-2].join("::")+".#{ms[-1]}"
           s=(" "*ident)+"/** Q Macro: #{ms} **/"+s+" /** END_Q **/" if $CM
 
-          STDOUT.puts "MACRO: template\n#{s}" if $LMACRO
+          #STDOUT.puts "MACRO: template\n#{s}" if $LMACRO
 
           s=s.gsub(/\%n_args/, args ? args.subast.length.to_s : '0')
 
@@ -572,9 +606,11 @@ module Q
           
           while s =~ /\%v([0-9+])_#{symbol}/
             m1=$1
-p s
+#p s
             v = args.subast[i=$1.to_i-1].build_str
-            p VS: bs=v, m: m1, a: args.subast[i=$1.to_i-1]
+            #p VS:
+            bs=v#, m: m1, a:
+            args.subast[i=$1.to_i-1]
             v = args.subast[i].node.arguments[0].name rescue 'void' if v =~ /^\%v([0-9+])/
             v=bs if v==""
             v = "void" if args.subast[i=m1.to_i-1] == nil
@@ -608,7 +644,7 @@ p s
 
           s=s.gsub(" = ;", " = null;")
 
-          STDOUT.puts "MACRO: expanded\n#{s}" if $LMACRO
+          #STDOUT.puts "MACRO: expanded\n#{s}" if $LMACRO
           s
         end
 
@@ -705,7 +741,7 @@ p s
         s=ast.subast[0].build_str.gsub(";",'');
 
         @body = "#if Q_PKG_#{s.gsub(/\.|\-/,"_").upcase}"
-        puts PKG: @body
+        #puts PKG: @body
        
         super(ident, nil).gsub(";",'');
       end
@@ -729,6 +765,77 @@ p s
         super ident, nil
       end    
       
+      defs=MACROS['Q.adddef'] = Macro.new('')
+      def defs.perform(ident, ast)
+        @body = ""
+        ast.subast.each do |s|
+          define_sym s.build_str
+        end
+        super ident, nil
+      end  
+
+      pai=MACROS['Q.addpkgifdef'] = Macro.new('')
+      def pai.perform(ident, ast)
+        @body = ""
+        #STDOUT.puts IFDEF: ast.subast[0].build_str
+        if is_def(q=ast.subast[0].build_str)
+        #STDOUT.puts IFDEF: q
+          ast.subast[1..-1].each do |s|
+            add_package s.build_str
+          end
+        end
+        super ident, nil
+      end 
+      
+      defi=MACROS['Q.adddefif'] = Macro.new('')
+      def defi.perform(ident, ast)
+        @body = ""
+        #STDOUT.puts IFDEF: ast.subast[0].build_str
+        if is_def(q=ast.subast[0].build_str)
+        #STDOUT.puts IFDEF: q
+          ast.subast[1..-1].each do |s|
+            define_sym s.build_str
+          end
+        end
+        super ident, nil
+      end           
+      
+      reqif=MACROS['Q.reqifdef'] = Macro.new('')
+      def reqif.perform(ident, ast)
+        @body = ""
+        #STDOUT.puts IFDEF: ast.subast[0].build_str, Q: :here
+        if is_def(q=ast.subast[0].build_str)
+        #STDOUT.puts IFDEF: q, LOAD: true
+          ast.subast[1..-1].each do |s|
+              rr = Q::Require.allocate
+              rr.path = s.node.value
+              rr.ok?
+
+              ::Object.send :perform, rr.path, $reqs
+            
+          end
+        end
+        super ident, nil
+      end  
+      
+      reqifn=MACROS['Q.reqifndef'] = Macro.new('')
+      def reqifn.perform(ident, ast)
+        @body = ""
+        #STDOUT.puts IFDEF: ast.subast[0].build_str
+        if !is_def(q=ast.subast[0].build_str)
+        #STDOUT.puts IFDEF: q
+          ast.subast[1..-1].each do |s|
+              rr = Q::Require.allocate
+              rr.path = s.node.value
+              rr.ok?
+
+              ::Object.send :perform, rr.path, $reqs
+            
+          end
+        end
+        super ident, nil
+      end               
+                  
       hp=MACROS['Q.have_pkg'] = Macro.new('')
       def hp.perform(ident, ast)
         @body = "#{has_pkg(ast.subast[0].build_str)}"
@@ -769,6 +876,9 @@ p s
       handles Q::Ast::Command
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         t = get_indent(ident)
         if (subast[0].symbol.to_sym == :struct or subast[0].symbol.to_sym == :namespace or subast[0].symbol.to_sym == :enum)
           if subast[1]
@@ -806,6 +916,8 @@ p s
           "#{t}stdout.printf(#{subast[1].build_str});"    
         elsif subast[0].symbol.to_sym == :print
           "#{t}stdout.printf((#{subast[1].build_str}).to_string());"
+        elsif subast[0].symbol.to_sym == :time
+          "#{t}new GLib.DateTime.from_unix_local(#{subast[1].build_str})"
         elsif subast[0].symbol.to_sym == :puts
           "#{t}stdout.puts((#{subast[1].build_str}).to_string()); stdout.putc('\\n');"        
         elsif subast[0].symbol.to_sym == :require
@@ -860,6 +972,9 @@ p s
     class ObjMember < Base
       handles Q::Ast::Field
       def build_str ident = 0
+Q.line = node.line
+""
+
         "#{subast[0].build_str}.#{subast[1].symbol}"
       end
       
@@ -877,6 +992,9 @@ p s
         subast[0].symbol.to_sym == :using
       end
       def build_str ident = 0
+Q.line = node.line
+""
+
         get_indent(ident)+"using #{subast[1].build_str}"
       end  
     end
@@ -927,6 +1045,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         get_indent(ident) + "#{target} #{visibility} delegate #{return_type ? return_type.get_type : :void} #{symbol}(#{params.build_str.gsub(":",'')})"
     
       end
@@ -968,6 +1089,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         get_indent(ident) + "#{target} #{visibility} signal #{return_type ? return_type : :void} #{symbol}(#{params.build_str.gsub(":",'')})"
     
       end
@@ -1000,6 +1124,9 @@ p s
       end      
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         ary = ""
         if subast[1].subast[0].params[0].array
           ary = "[]"
@@ -1021,6 +1148,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         "#{kind.to_s.gsub(/\@$/,'')}#{what.build_str}"
       end 
     end    
@@ -1029,6 +1159,9 @@ p s
       handles Q::Ast::Program
       include HasBody
       def build_str ident = -2
+Q.line = node.line
+""
+
         write_body(ident)+
         if $prog == Q.filename
           Q.at_exit.map do |v|
@@ -1068,7 +1201,10 @@ p s
         parent.append_includes(self)
       end
       
-      def build_str ident = 0; "p why?" ; end
+      def build_str ident = 0
+Q.line = node.line
+""
+; "p why?" ; end
     end
 
     module IFace
@@ -1141,6 +1277,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
 
         s="#{get_indent(ident)}" +
         unless namespace? or enum?
@@ -1215,6 +1354,9 @@ p s
       
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         ""
       end
     end
@@ -1229,6 +1371,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         get_indent(ident)+"#{first}:#{last}"
       end
     end
@@ -1252,6 +1397,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line if node
+""
+
         p = self
         what = self.what
         while p = p.parent
@@ -1325,6 +1473,9 @@ p s
       end      
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         "#{get_indent(ident)}#{visibility}#{iface_type ? " "+class_type : ""} #{struct? ? "struct" : "class"} #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"+
         write_body(ident).strip+
         "\n#{get_indent(ident)}}"
@@ -1351,6 +1502,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         #if @target.build_str == "Q" and @what.symbol.to_s == "ENV"
         #  return (" "*ident)+"new Q.Env()"
         #end
@@ -1409,6 +1563,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         if m=is_macro?
           return m.perform(ident, @arguments)
         end
@@ -1432,6 +1589,9 @@ p s
     class ZSuper < Base
       handles Q::Ast::ZSuper
       def build_str ident = 0
+Q.line = node.line
+""
+
         args = scope.member.params.typed.map do |p| p.name end.join(", ")
         if scope.member.is_a?(Singleton)
           get_indent(ident) + "base(#{args})"
@@ -1444,8 +1604,15 @@ p s
     class Super < Base
       handles Q::Ast::Super
       def build_str ident = 0
+Q.line = node.line
+""
+
         args = subast[0].build_str
-        get_indent(ident) + "base(#{args})"
+        if scope.member.is_a?(Singleton)
+          get_indent(ident) + "base(#{args})"
+        else
+          get_indent(ident) + "base.#{scope.member.symbol}(#{args})"
+        end
       end
     end    
     
@@ -1460,6 +1627,9 @@ p s
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         subast.map do |c|
           c.parented self;
           (c.node.flags[:type] ? "#{c.build_str }#{c.is_a?(ArrayDeclaration) ? "[]" : ""}" : "#{c.build_str }")
@@ -1514,8 +1684,8 @@ end
         else
           # warn declaration by infered type
           if type = DeclaredType.new(variable.symbol, value) and !type.infered? and !((value.is_a?(MethodAddArg) or value.is_a?(Call) or value.is_a?(VCall) or value.is_a?(VarRef)) and value.is_macro?)
-            bool = value.build_str == type.type
-         
+            bool = value.build_str == type.type.to_s
+         #STDOUT.puts value.build_str,type.type.inspect
             return declare_field(type)+ "; " + (bool ? '' : assign_local)
           elsif !subast[0].is_a?(ARefField)
             return declare_field(DeclaredType.new(variable.symbol, nil), ident)
@@ -1637,6 +1807,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         if variable.respond_to?(:kind)
           case variable.kind
           when :instance
@@ -1680,6 +1853,9 @@ end
 
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         return get_indent(ident) + case variable.kind
         when :constant
           "public const " + declare_field()
@@ -1696,7 +1872,7 @@ end
         
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value)
         if type.infered?
-        STDOUT.puts "#{type.inspect}"
+          #STDOUT.puts "#{type.inspect}"
           raise "Cant infer field types: #{type.name}, #{type.type}"
         else
           if value.is_a?(Type)
@@ -1709,7 +1885,7 @@ end
           elsif type and type.type
             type.build_str
           else
-          STDOUT.puts value,type.inspect
+            #STDOUT.puts value,type.inspect
             raise "Cant determine type for field #{symbol}"
           end
         end
@@ -1738,15 +1914,18 @@ end
       end
       
       def values
-        @values ||= compiler.handle(node.values)
+        @values ||= node.values ? compiler.handle(node.values) : nil
       end
       
-      def build_str ident=0
+      def build_str ident = 0
+Q.line = node.line
+""
+
         if of.is_a?(DeclaredType)
         "#{of.get_type}[]"
         else
           of.parented self
-          values.parented self
+          values.parented self if values
           of.build_str+
           "[#{values.build_str}]"
         end
@@ -1769,6 +1948,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         fields.subast.map do |f| 
           type = DeclaredType.new(f.variable.symbol, self.type, self.type.is_a?(ArrayDeclaration))
           
@@ -1805,6 +1987,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         value
       end
       
@@ -1850,6 +2035,9 @@ end
 
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         node.kind
       end
     end
@@ -1870,6 +2058,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         p=self
         if left.is_a?(VarField)
           while p=p.parent
@@ -1906,6 +2097,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         q = if node.value == :nil
           "null"
         elsif node.value == :self
@@ -1968,6 +2162,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         "#{iface}<#{types.join(", ")}>"
       end
       
@@ -2022,6 +2219,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         if !m=is_macro?
 
           return get_indent(ident) + symbol
@@ -2054,6 +2254,9 @@ end
         mark_newline false
       end
       def build_str ident = 0
+Q.line = node.line
+""
+
         ""
       end
     end    
@@ -2073,6 +2276,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         raise "only backrefs should be here" unless node.kind == :backref or node.kind == :global 
         if symbol.to_s == "$"
           return get_indent(ident) + "Posix.getpid()"
@@ -2118,6 +2324,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         node.value.to_s + 
         case get_type
         when :float
@@ -2150,6 +2359,9 @@ end
       
       
       def build_str ident = 0
+Q.line = node.line
+""
+
 
         "#{get_indent(ident)}#{target.build_str.gsub(/f|d$/,'')}#{type.to_s[0]}"
       end
@@ -2158,6 +2370,9 @@ end
     class Return < Base
       handles Q::Ast::Return
       def build_str ident = 0
+Q.line = node.line
+""
+
         return get_indent(ident) + "return (#{subast[0].build_str()})" if subast[0].build_str() != ""
         return get_indent(ident) + "return"
       end
@@ -2166,6 +2381,9 @@ end
     class Return0 < Base
       handles Q::Ast::Return0
       def build_str ident = 0
+Q.line = node.line
+""
+
         get_indent(ident) + "return"
       end
     end    
@@ -2187,6 +2405,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         subast[0].build_str ident
       end      
     end    
@@ -2212,6 +2433,9 @@ end
       end 
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         get_indent(ident) +
         (marked_template? ? "@\"" : "\"")+
         subast.map do |q| q.build_str() end.join() +
@@ -2232,6 +2456,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         value
       end   
     end
@@ -2261,6 +2488,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         
         if self.class == Q::ValaSourceGenerator::If
           mark_prepend_newline true
@@ -2305,6 +2535,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         
         if self.class == Q::ValaSourceGenerator::Unless
           mark_prepend_newline true
@@ -2335,6 +2568,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         unless self.rescue
           Q::compile_error self, "begin without rescue!"
         end
@@ -2360,6 +2596,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         "#{t=get_indent(ident)}catch (#{what ? what.build_str() : "Error"} #{variable ? variable.variable.symbol : "_q_local_err"}) {\n"+
         write_body(ident) + 
         "#{next_rescue ? "\n#{t}} "+next_rescue.build_str(ident) : ""}"
@@ -2369,7 +2608,10 @@ end
     class Ensure < Base
       include HasBody
       handles Q::Ast::Ensure     
-      def build_str ident=0
+      def build_str ident = 0
+Q.line = node.line
+""
+
         "#{get_indent(ident)}finally {\n"+
         write_body(ident)
       end
@@ -2381,6 +2623,9 @@ end
       handles Q::Ast::Else
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         (t=get_indent(ident)) +
         "else {\n"+
         write_body(ident)+
@@ -2405,6 +2650,9 @@ end
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         s = exp.build_str
         s << " != null" unless exp.is_a?(Binary)
 
@@ -2438,7 +2686,7 @@ end
         super
         @macro_declares = {}
         @params = compiler.handle(node.params)
-STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
+#STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
         if subast[0].is_a?(Type)
           @return_type = ResolvedType.new(subast.shift)
         elsif  match_type_path(self)
@@ -2462,7 +2710,10 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
      
       def build_str ident = 0
-        p BUILD_METHOD: self.symbol, SCOPE: self.scope.sym, RT: return_type
+Q.line = node.line
+""
+
+        #p BUILD_METHOD: self.symbol, SCOPE: self.scope.sym, RT: return_type
 
         plist = params.typed.reverse.map do |p| p.build_str end
         
@@ -2701,6 +2952,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         case to.build_str.strip
         when "out"
                 what.parented self if what.is_a?(VarRef)
@@ -2754,6 +3008,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         plist = params.typed.reverse.map do |p| p.build_str end
         
         params.typed.reverse.each_with_index do |p,i|
@@ -2826,7 +3083,7 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
             q = ".#{symbol.to_s.gsub(/^new\_/,'')}"
           end
           
-          sig = "#{visibility} #{scope.member.name}#{q} (#{plist.reverse.join(", ")}) {\n"
+          sig = "#{visibility} #{scope.member.name.to_s.gsub(/\<.*?\>/,'')}#{q} (#{plist.reverse.join(", ")}) {\n"
         end
         
         get_indent(ident) + 
@@ -2839,6 +3096,8 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
     class MethodAddBlock < Base
       handles Q::Ast::MethodAddBlock
       def build_str ident = 0
+Q.line = node.line
+""
         args = subast[0].subast[1].subast[0] ? subast[0].subast[1].subast[0].subast.length : 0
         get_indent(ident) + subast[0].build_str().gsub(/\)$/, args == 0 ? "" : ", ") + 
         subast[1].build_str(ident) +
@@ -2858,6 +3117,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         parent.mark_semicolon false
         mark_semicolon false
         mark_newline true
@@ -2883,6 +3145,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         get_indent(ident) + subast[0].build_str() +
         " {\n#{get_indent(ident+2)}" +
         subast[1].build_str(ident+2) +
@@ -2914,6 +3179,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         "(#{params ? params.untyped.map do |p| p.name end.join(", ") : ""}) => {\n" +
         write_body(ident) + 
         "\n#{get_indent(ident)}}"
@@ -2944,6 +3212,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         if !m=is_macro?
           get_indent(ident) + subast[0].build_str +
           "(" +
@@ -2968,6 +3239,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       handles Q::Ast::ArgParen
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         subast[0] ? subast[0].build_str : ""
       end
     end    
@@ -2976,6 +3250,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       handles Q::Ast::FCall
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         p = self
         q=subast[0].symbol
         while p=p.parent
@@ -2996,13 +3273,16 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
       method = ""
       
       if subast[0].what.symbol.to_sym != :new
         method = "." +
         "#{subast[0].what.symbol}".gsub(/^new\_/,'')
       end
-        "new #{subast[0].target.build_str}#{method}(#{subast[1].build_str})"
+        "new #{subast[0].target.build_str.gsub("[", '<').gsub("]", '>')}#{method}(#{subast[1].build_str})"
       end
     end    
 
@@ -3061,6 +3341,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         what = @what.build_str
         if scope and scope.member.macro?
           @var_name = scope.member.macro_vcall(@var_name)
@@ -3099,6 +3382,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         get_childrens_scope().append_lvar var_name.to_sym, DeclaredType.new(var_name.to_sym, type.to_sym)
         
         "#{get_indent(ident)}foreach (#{type} #{var_name} in #{array})"+
@@ -3127,6 +3413,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         e = For.allocate
         type = "int"
         _in = Q::Range.allocate
@@ -3173,6 +3462,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         e = For.allocate
         type = "int"
         _in = subast[0].target.subast[0]
@@ -3208,6 +3500,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
     
       def build_str ident = 0
+Q.line = node.line
+""
+
         if subast[0].node.flags[:type]
           "#{get_indent(ident)}typeof (#{subast[0].build_str}#{subast[0].is_a?(ArrayDeclaration) ? "[]" : ""})"
 
@@ -3221,7 +3516,17 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       attr_accessor :array, :type
       def initialize t, a=false
         @array = a
-       
+
+
+        if t.is_a?(ARef) and (t.of.is_a?(ConstPathRef) or (t.of.is_a?(Call) and (t.of.node.target.is_a?(Ast::ConstPathRef) or t.of.node.target.is_a?(Ast::SymbolLiteral))))
+
+          if t.values
+            @t=t=t.of.build_str+"<#{t.values.subast.map do |v| puts v.build_str;v.build_str end.join(", ")}>" 
+          else
+            @t=t=t.of.build_str+"[]"
+          end
+        end
+     
         if t.is_a?(TypeType)
           t = t.target
         end
@@ -3260,7 +3565,7 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
           else
      
             @type = :infered
-            STDOUT.puts t
+            #STDOUT.puts t
             @type = t.build_str if t.is_a?(Q::ValaSourceGenerator::VCall) rescue :infered
             qqq=t.build_str  if t.is_a?(Q::ValaSourceGenerator::Call)
             
@@ -3324,6 +3629,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0, p = nil
+Q.line = p.node.line if p
+""
+
      # @type = @t  if @t
      
      name = self.name
@@ -3353,6 +3661,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         "#{get_indent(ident)}" +
         subast[0].build_str + "." +
         subast[1].symbol
@@ -3409,7 +3720,10 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
         node.value
       end
 
-      def build_str ident=0
+      def build_str ident = 0
+Q.line = node.line
+""
+
         symbol.to_s
       end
     end  
@@ -3418,6 +3732,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       handles Q::Ast::SymbolContent
       
       def build_str ident = 0
+Q.line = node.line
+""
+
 
       end
     end 
@@ -3431,6 +3748,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         q=subast[0].build_str#, p: pp=parent.parent.parent.parent.parent.parent
 
         if pp.is_a?(Def)
@@ -3451,11 +3771,14 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
 
     class IfOp < Base
       handles Q::Ast::IfOp
-      def build_str ident=0
+      def build_str ident = 0
+Q.line = node.line
+""
+
         s=subast[0].build_str(ident)+" ? "+
         subast[1].build_str+" : "+
         subast[2].build_str
-        STDOUT.puts s
+        #STDOUT.puts s
         s
       end
     end
@@ -3480,6 +3803,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
         end
         
         def build_str ident = 0
+
+""
+
           s=""
           if declare?()
             s="private #{@q.type}#{@q.array ? "[]" : ""} _#{@q.name};\n"
@@ -3515,6 +3841,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       end
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         @values.map do |v| (" "*ident)+v.build_str(ident) end.join("\n")
       end
       
@@ -3586,7 +3915,10 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
         mark_extra_newline true
       end
       
-      def build_str ident=0
+      def build_str ident = 0
+Q.line = node.line
+""
+
         "#{i=(" "*ident)}if (#{subast[0].build_str(0)}) {\n"+
         subast[1..-1].map do |c|
           c.build_str(ident+2)+";"
@@ -3611,6 +3943,9 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
       
       
       def build_str ident = 0
+Q.line = node.line
+""
+
         subast.map do |c|
           c.build_str(ident+2)
         end.join("\n")
@@ -3618,3 +3953,4 @@ STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
     end       
   end
 end
+

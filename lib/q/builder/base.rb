@@ -5,7 +5,7 @@ module Q
     puts "#{w.node.line}, #{w.class}, #{w.node.event}"
     puts "#{m}";
     puts "#{src.split("\n")[w.node.line-1]}"
-    exit(1)
+    raise 
   end
 end
 require "compiler"

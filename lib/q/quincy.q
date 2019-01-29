@@ -6,11 +6,11 @@ Q::flags(:'--thread')
 
 namespace module Quincy
   class MimeTypeQuery
-    @types = :Hash[:string, :string?]
+    @types = :Hash[:string?]
     :MimeTypeQuery[@@singleton]
     
     def self.new()
-      @types = Hash[:string, :string?].new()
+      @types = Hash[:string?].new()
       @types["txt"]   = "text/plain"
       @types["html"]  = "text/html"
       @types["xhtml"] = "application/xhtml+xml"
@@ -120,10 +120,10 @@ namespace module Quincy
     def runner(app:App); end    
 
     class Routes
-      attr_accessor get: :Hash[:string, :Route?], post: :Hash[:string, :Route?]
+      attr_accessor get: :Hash[:Route?], post: :Hash[:Route?]
       def self.new()
-         @get  = Hash[:string, :Route?].new()
-         @post = Hash[:string, :Route?].new()
+         @get  = Hash[:Route?].new()
+         @post = Hash[:Route?].new()
       end
     end
     
@@ -175,14 +175,14 @@ namespace module Quincy
       end
 
       if nil == m
-        `Hash<string, Route?>? mr = null;`
+        `Hash<Route?>? mr = null;`
         if msg.method == "POST"
           `mr = this.routes.post;`
         elsif msg.method == "GET"
           `mr = this.routes.get;`
         end
       
-        mr.keys().each do |t|
+        mr.keys.each do |t|
           r = mr[t]
           if (:Route << r).regexp != nil
             if (:Route << r).regexp.match(path, 0, :out.md)

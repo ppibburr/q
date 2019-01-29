@@ -125,10 +125,7 @@ module Q
         end
         
         subast.each do |q| q.parented(self) end
-      rescue => e
-        puts e
-        puts e.backtrace.join("\n")
-        Q.compile_error self
+      
       end
       
       def get_childrens_scope()
