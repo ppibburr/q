@@ -9,13 +9,26 @@ def puts *o
   super if $V
   o[0]
 end
+
+
+class String
+  def type; self; end; def q; self end; def build_str ident=0; self; end
+end
+
 od = Dir.getwd
 Dir.chdir File.dirname(__FILE__)+"/../"
 require './lib/q'
 require "./lib/q/builder/compilers/vala.rb"
 Dir.chdir od
 class << Q
-  attr_accessor :line
+  def line= l
+    @ol = @line if @line
+    @line = l if l
+  end
+  
+  def line
+    @line || @ol
+  end
 end
 
 Q::Ast.compiler_type = Q::ValaSourceGenerator
@@ -236,8 +249,9 @@ rescue => e
   l = la[ln=Q.line-1]
   if e.backtrace[0] =~ /declare_field/ and l =~ /\=( [A-Z]|[A-Z])/
     t="FieldDeclarationError"
-    STDOUT.puts "Type declaration must be proceeded wirh `:`"
+    STDOUT.puts "Type declaration must be proceeded with `:`"
   end
+  (t = "MethodInvocationError") and STDOUT.puts("methods invocation not to proceed with space ` (`") if (l =~ /\.[a-zA-Z0-9]+ \(/)
   (t = "MethodInvocationError") and STDOUT.puts("methods must be invoked with `()`") if (l=~ /[a-z0-9] do( |\n)/) or l.strip == "end"
   puts "..."
   STDOUT.puts "<#{t}> \e[31merror\e[0m: #{f} line #{Q.line}] #{l}"

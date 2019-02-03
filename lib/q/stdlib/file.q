@@ -86,7 +86,7 @@ namespace module Q
     if f =~ /^\~\//
       r = GLib::Environment.get_home_dir()+"/"+f.split("~/")[1]
     elsif f =~ /^\//
-      
+      r = f
     else
       r = c+"/"+f
     end

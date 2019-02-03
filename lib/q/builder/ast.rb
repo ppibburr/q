@@ -829,8 +829,9 @@ module Q
       attr_reader :ordered, :keywords, :defaults, :swarm
       def initialize *o
         super
+        
         @ordered = arguments.shift || []
-        _ = arguments.shift
+        @defaults = arguments.shift || []
         _ = arguments.shift
         _ = arguments.shift
         @keywords = arguments.shift || []
@@ -839,7 +840,9 @@ module Q
       
       def parented *o
         super
+        
         ordered.each do |q| q.each do |t| t.parented parent end end
+        keywords.each do |q| q.each do |t| t.parented parent end end
         defaults.each do |q| q.each do |t| t.parented parent end end        
       end
     end

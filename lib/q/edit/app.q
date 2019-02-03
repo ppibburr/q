@@ -16,7 +16,7 @@ namespace module Q
 
         set_option_context_summary(get_help_summary())
 
-        startup.connect() do activate() end
+        #startup.connect() do activate() end
 
         open.connect() do |files,hint|      
           if @window == nil
@@ -29,8 +29,6 @@ namespace module Q
         end
         
         command_line.connect() do |cl|
-          register()
-          
           aa=cl.get_arguments()
           
           (aa.length-1).times do |i|
@@ -42,10 +40,14 @@ namespace module Q
               elsif a =~ /^\-\-(.*)/
                 on_opt(cl, $1)
               else
+                puts "FILE: #{a} -- #{Q::File.expand_path(a, cl.get_cwd())}"
                 GLib::Idle.add() do editor.open_file(Q::File.expand_path(a, cl.get_cwd())); next false; end
               end
             end
           end
+          
+          register()
+          activate()
          
           return 0
         end
@@ -54,8 +56,10 @@ namespace module Q
       def on_opt(cl:ApplicationCommandLine, o:string);
         if o=="session-list"
           cl.print("%s\n", Session.list(editor))
+          exit(0) if nil == @window
         elsif o == "session-active"
           cl.print("%s\n", Session.list_active(editor))
+          exit(0) if nil == @window
         elsif o == "session-clear"
           Session.clear(editor)
         elsif o == "session-restore"
@@ -63,6 +67,11 @@ namespace module Q
           Session.restore(editor)
         elsif o == "session-save"
           Session.save(editor)
+        elsif o == "list-schemes"
+          for id in Gtk::SourceStyleSchemeManager.get_default().scheme_ids
+            cl.print("%s\n", id)
+          end
+          exit(0) if nil == @window
         elsif o == "close-all"
           editor.close_all()
         end
@@ -70,8 +79,11 @@ namespace module Q
       
       def on_opt_value(cl:ApplicationCommandLine, o:string, v:string); 
         if o=="session"
-          editor.session = Q::expand_path(v, cl.get_cwd())
-          @window.present()
+          GLib::Idle.add() do
+            editor.session = Q::expand_path(v, cl.get_cwd())
+            @window.present()
+            next false
+          end
         elsif o=="find"
           @editor.each_view() do |vw|
             i = -1
@@ -83,6 +95,10 @@ namespace module Q
           end
         elsif o == "completion"
           editor.load_provider(Q::expand_path(v, cl.get_cwd()))
+        elsif o == "scheme"
+          editor.each_view() do |vw|
+            vw.edit_view.buffer.style_scheme = Gtk::SourceStyleSchemeManager.get_default().get_scheme(v)
+          end
         end
       end
       
@@ -131,7 +147,7 @@ namespace module Q
           exit(0) if is_remote
           next false
         end
-        return base.run(argv)
+        return super(argv)
       end
     end
   end

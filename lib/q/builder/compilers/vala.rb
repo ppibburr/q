@@ -6,6 +6,150 @@ class NilClass
     Q.line
   end
 end
+
+class Symbol; def type; self; end;
+  def nullable?
+    to_s =~ /\?/
+  end
+  def array
+    to_s =~ /\[/
+  end
+  
+  def q; self.to_s; end
+end
+
+def type_from_exp(s, c, l)
+  if s=~ /^this\.([a-zA-Z0-9]+)\(.*\)$/
+    t = c.scope.return_types[$1]
+    return t if t
+  end
+    
+  if s=~ /\+this\.([a-zA-Z0-9]+)\(.*\)$/
+    t = c.scope.return_types[$1]
+    return t if t
+  end
+    
+  if s=~ /\+ this\.([a-zA-Z0-9]+)\(.*\)$/
+    t = c.scope.return_types[$1]
+    return t if t
+  end 
+
+  if s=~ /^([a-zA-Z0-9]+)\(.*\)$/
+    t = c.scope.return_types[$1]
+    return t if t
+  end
+    
+  if s=~ /\+([a-zA-Z0-9]+)\(.*\)$/
+    t = c.scope.return_types[$1]
+    return t if t
+  end
+  
+  if s =~ /\+ ([a-zA-Z0-9]+)\(.*\)$/
+    t = c.scope.return_types[$1]
+    return t if t
+  end
+    
+  if s=~ /^([a-zA-Z0-9]+)\(.*\)\+/
+    t = c.scope.return_types[$1]
+    return t if t
+  end
+  
+  
+  if s=~ /^([a-zA-Z0-9]+)\(.*\) \+/
+    t = c.scope.return_types[$1]
+    return t if t       
+  end
+     
+  if s=~ /^this\.([a-zA-Z0-9]+)$/
+    t = c.scope.fields[$1]
+    t = c.scope.properties[$1] unless t
+
+    return t.q.split(" ")[0..0].join(" ") if t
+  end
+    
+  if s=~ /\+this\.([a-zA-Z0-9]+)$/
+    t = c.scope.fields[$1]
+    t = c.scope.properties[$1] unless t
+    return t.q.split(" ")[0..0].join(" ") if t
+  end
+    
+  if s=~ /\+ this\.([a-zA-Z0-9]+)$/
+    t = c.scope.fields[$1]
+    t = c.scope.properties[$1] unless t
+    return t.q.split(" ")[0..0].join(" ") if t  
+  end
+  
+  if s=~ /^this\.([a-zA-Z0-9]+)\+/
+    t = c.scope.fields[$1]
+    t = c.scope.properties[$1] unless t
+    return t.q.split(" ")[0..0].join(" ") if t
+  end
+  
+  if s=~ /^this\.([a-zA-Z0-9]+) \+/
+    t = c.scope.fields[$1]
+    t = c.scope.properties[$1] unless t
+    return t.q.split(" ")[0..0].join(" ") if t                  
+  end
+  
+  if s=~ /^[0-9]+ \>/ or s =~ /^[0-9]+\>/
+    return 'bool'
+  end
+  
+  if s=~ /^[a-z] \>/ or s =~ /^[a-z]\>/
+    return 'bool'
+  end
+  
+  if s=~ /^[0-9]+ \=\=/ or s =~ /^[0-9]+\=\=/
+    return 'bool'
+  end
+  
+  if s=~ /^[a-z] \=\=/ or s =~ /^[a-z]\=\=/
+    return 'bool'
+  end  
+  
+  if s=~ /^[0-9]+ \!\=/ or s =~ /^[0-9]+\=\=/
+    return 'bool'
+  end
+  
+  if s=~ /^[a-z] \!\=/ or s =~ /^[a-z]\=\=/
+    return 'bool'
+  end
+  
+  if s=~ /^[0-9]+ \~\=/ or s =~ /^[0-9]+\=\=/
+    return 'bool'
+  end
+  
+  if s=~ /^[a-z] \~\=/ or s =~ /^[a-z]\=\=/
+    return 'bool'
+  end      
+  
+  if s=~ /^([a-zA-Z0-9]+)\+/  
+    t = l.locals[$1]
+    return t.build_str.split(" ")[0] if t and t.build_str.split(" ")[0].to_s != 'infered'
+  end
+  
+  if s=~ /^([a-zA-Z0-9]+) \+/  
+    t = l.locals[$1]
+    return t.build_str.split(" ")[0] if t and t.build_str.split(" ")[0].to_s != 'infered'
+  end  
+  
+  if s=~ /\+([a-zA-Z0-9]+)$/  
+    t = l.locals[$1]
+    return t.build_str.split(" ")[0] if t and t.build_str.split(" ")[0].to_s != 'infered'
+  end  
+  
+  if s=~ /\+ ([a-zA-Z0-9]+)$/  
+    t = l.locals[$1]
+    return t.build_str.split(" ")[0] if t and t.build_str.split(" ")[0].to_s != 'infered'
+  end   
+  
+  t = l.locals[s]
+  return t.build_str.split(" ")[0] if t and t.build_str.split(" ")[0].to_s != 'infered'
+  
+  return nil
+end
+
+
 $: << File.dirname(__FILE__)
 require "source_generator"
 
@@ -44,16 +188,20 @@ module Q
   
   class ValaSourceGenerator < Q::SourceGenerator
       class ClassScope < Q::Compiler::ClassScope
-        attr_accessor :properties
+        attr_accessor :properties, :return_types
         
         def initialize *o
           super
           @properties = {}
+          @fields = {}
+          @return_types = {}
         end
         
         def add_property symbol, prop
           @properties[symbol] = prop
         end
+        
+        def fields; @fields; end
       end
   
       class MethodScope  < Q::Compiler::MethodScope
@@ -912,10 +1060,10 @@ Q.line = node.line
           "#{t}Process.spawn_command_line_sync(#{subast[1].build_str}, null, null, out _q_local_scope_process_exit_status)"
         elsif subast[0].symbol.to_sym == :sleep
           "#{t}Thread.usleep((ulong)(#{subast[1].build_str} * 1000 * 1000))"
-        elsif subast[0].symbol.to_sym == :printf
-          "#{t}stdout.printf(#{subast[1].build_str});"    
         elsif subast[0].symbol.to_sym == :print
-          "#{t}stdout.printf((#{subast[1].build_str}).to_string());"
+          "#{t}stdout.printf((#{subast[1].build_str}).to_string());"    
+        elsif subast[0].symbol.to_sym == :printf
+          "#{t}stdout.printf(#{subast[1].build_str});"
         elsif subast[0].symbol.to_sym == :time
           "#{t}new GLib.DateTime.from_unix_local(#{subast[1].build_str})"
         elsif subast[0].symbol.to_sym == :puts
@@ -1473,8 +1621,10 @@ Q.line = node.line if node
       end      
       
       def build_str ident = 0
-Q.line = node.line
-""
+        Q.line = node.line
+        ""
+
+        subast.find_all do |a| a.is_a?(Def) end.each do |a| a.build_str; a.instance_variable_get("@childs_scope").instance_variable_set("@locals", {}); end 
 
         "#{get_indent(ident)}#{visibility}#{iface_type ? " "+class_type : ""} #{struct? ? "struct" : "class"} #{name}#{do_inherit? ? " : #{inherits.join(", ")} " : " "}{\n"+
         write_body(ident).strip+
@@ -1747,10 +1897,25 @@ end
             val_str = value.build_str(ident).strip
           end
 
+
+
           if val_str.strip == ""
-            "var #{variable.symbol} = #{qqq}"
+            vv="var"
+            if c=scope.class_scope
+            if vt = type_from_exp(qqq.strip, c, scope)
+              vv = vt; scope.locals[variable.symbol] = vt
+            end
+            end
+            "#{vv} #{variable.symbol} = #{qqq}"
+
           else
-            "#{qqq}var #{variable.symbol} = #{val_str}"
+            vv="var"
+            if c=scope.class_scope
+            if vt = type_from_exp(val_str.strip, c, scope)
+              vv = vt; scope.locals[variable.symbol] = vt
+            end
+            end
+            "#{qqq}#{vv} #{variable.symbol} = #{val_str}"
           end
         elsif type.infered? and value.build_str =~ /^\((.*)\)[a-zA-Z0-9]/
           n=value.node
@@ -1876,6 +2041,9 @@ Q.line = node.line
       end
         
       def declare_field type = DeclaredType.new(symbol = variable.symbol, value)
+      if scope.is_a?(ClassScope)
+        scope.fields[symbol] = type.build_str
+      end
         if type.infered?
           #STDOUT.puts "#{type.inspect}"
           raise "Cant infer field types: #{type.name}, #{type.type}"
@@ -2276,6 +2444,8 @@ Q.line = node.line
         node.symbol
       end
       
+      def name; symbol.to_s; end
+      
       def kind
         node.kind
       end
@@ -2655,8 +2825,8 @@ Q.line = node.line
       end
       
       def build_str ident = 0
-Q.line = node.line
-""
+        Q.line = node.line
+        ""
 
         s = exp.build_str
         s << " != null" unless exp.is_a?(Binary)
@@ -2668,11 +2838,73 @@ Q.line = node.line
       end
     end    
 
-    
+    module InferReturn
+      def infer
+        if (return_type = self.return_type) == nil
+          r_=subast.find do |q| q.is_a?(Return) end
+          sa = self
+          5.times do
+          if !r_ and sa and sa=sa.subast.find do |q| q.is_a?(If) end
+            r_=sa.subast.find do |q| q.is_a?(Return) end
+          end
+          end
+          if r_
+            qq=r_.subast[0].build_str()
+            
+            if qq =~ /^\((.*)\)[a-zA-Z0-9]/
+              rt = $1
+              return_type = nil
+            else
+              rt = return_type ? (return_type.is_a?(::String) ? return_type : return_type.type) : :void
+              #p MT: rt, sym: symbol, qq: qq
+              case qq
+              when /^[a-zA-Z0-9]+\=\=[a-zA-Z0-9]+$/
+                rt = "bool"
+              when /^[a-zA-Z0-9]+ \=\= [a-zA-Z0-9]+$/
+                rt = "bool"   
+              when /^[a-zA-Z0-9]+\!\=[a-zA-Z0-9]+$/
+                rt = "bool"
+              when /^[a-zA-Z0-9]+ \!\= [a-zA-Z0-9]+$/
+                rt = "bool"   
+              when /^\"/
+                rt = "string"
+              when /^\@\"/
+                rt = "string"              
+              when /^\'/
+                rt = "char"
+              when /^[0-9]+\./
+                rt = "double"
+              when /^\-[0-9]+\./
+                rt = "double"
+              when /^[0-9]/
+                rt = "int"
+              when /^\-[0-9]/
+                rt = "int"  
+              when /false|true/
+                rt = "bool"
+              else
+                rt = type_from_exp(qq, self, get_childrens_scope)
+                rt = (return_type ? return_type.type : :void) unless rt
+              end
+            end 
+          else
+          
+            rt = return_type ? return_type.type : :void
+          end
+        elsif return_type.is_a?(::String)
+          rt = return_type
+        else
+          rt = return_type ? return_type.type : :void
+        end
+        
+        return rt      
+      end
+    end
     
     class Def < Base
       include HasBody
       include DefaultMemberDeclaration
+      include InferReturn
       handles Q::Ast::Def
 
       def match_type_path q
@@ -2691,7 +2923,7 @@ Q.line = node.line
         super
         @macro_declares = {}
         @params = compiler.handle(node.params)
-#STDOUT.puts BUILD_METHOD: subast[0], stm: symbol, oo: subast[0].subast[0]
+
         if subast[0].is_a?(Type)
           @return_type = ResolvedType.new(subast.shift)
         elsif  match_type_path(self)
@@ -2715,10 +2947,8 @@ Q.line = node.line
       end
      
       def build_str ident = 0
-Q.line = node.line
-""
-
-        #p BUILD_METHOD: self.symbol, SCOPE: self.scope.sym, RT: return_type
+        Q.line = node.line
+        ""
 
         plist = params.typed.reverse.map do |p| p.build_str end
         
@@ -2729,7 +2959,8 @@ Q.line = node.line
             break
           end
         end
-
+        
+     
         if macro?
           @q_macro = scope.sym.split("::").join("__")+"__"+symbol.to_s
           body = write_body(0)
@@ -2774,53 +3005,23 @@ Q.line = node.line
           end.join(", ")+
           ">"
         end
-        if delegate == "" or "virtual" == kind
+        if (delegate == "" or "virtual" == kind) and !abstract?
           h=" {\n"
-          
+          params.typed.each do |x| get_childrens_scope.locals[x.name] = x.build_str.split(" ")[0] end
+
           z=write_body(ident)
           y="\n#{get_indent(ident)}}"
         else
           h=";"
         end
 
-        return_type = self.return_type
-        if r_=subast.find do |q| q.is_a?(Return) end
-          qq=r_.subast[0].build_str()
-          if t_ = get_childrens_scope.locals[qq] and t_.type != :infered and !return_type
-            return_type = t_
-            rt = t_.type
-          elsif qq =~ /^\((.*)\)[a-zA-Z]/
-            rt = $1
-            return_type = nil
-          else
-            rt = return_type ? (return_type.is_a?(::String) ? return_type : return_type.type) : :void
-            #p MT: rt, sym: symbol, qq: qq
-            case qq
-            when /^\"/
-              rt = "string"
-            when /^\@\"/
-              rt = "string"              
-            when /^\'/
-              rt = "char"
-            when /^[0-9]+\./
-              rt = "double"
-            when /^\-[0-9]+\./
-              rt = "double"
-            when /^[0-9]/
-              rt = "int"
-            when /^\-[0-9]/
-              rt = "int"  
-            end
-          end 
-        else
-        
-          rt = return_type ? return_type.type : :void
-        end
+        rt = infer
         
         ret = return_type and (return_type.is_a?(::String) ? return_type =~ /\?$/ : return_type.nullable?)
         if ret and rt.to_sym!=:void
           if !subast.find do |q| q.is_a?(Return) end
-            ret = "\n\n#{get_indent(ident+2)}return null;"
+            ret = ""#\n\n#{get_indent(ident+2)}return null;"
+   
           else
             ret = ""
           end
@@ -2831,6 +3032,7 @@ Q.line = node.line
         rt = '' if symbol == :construct
 
         rta = (return_type.is_a?(::String) ? return_type =~ /\[\]/ : return_type.array) ? "[]" : '' if return_type
+        scope.return_types[symbol] = "#{rt}#{rta}" if scope.is_a?(ClassScope)
         "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{delegate} #{rt}#{rta} #{symbol}#{generics}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"}" +
         h+(z ? z+ret+y : '')
       end
@@ -2861,7 +3063,7 @@ Q.line = node.line
             return ""
           end
             
-          scope.is_a?(Q::Compiler::ClassScope) ? " #{@modifiers.index(:new) ? "new" : ""} #{@modifiers.index(:override) ? "override" : "virtual"}" : ""
+          scope.is_a?(Q::Compiler::ClassScope) ? " #{@modifiers.index(:new) ? "new" : ""} #{@modifiers.index(:override) ? "override" : "#{@modifiers.index(:abstract) ? "abstract" : "virtual"}"}" : ""
         end
       end
     end  
@@ -2944,9 +3146,10 @@ Q.line = node.line
     
     class Cast < Base
       handles Q::Ast::Binary, Binary do
-        (((left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :"<<") or
+        ((((left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :"<<") or
         ((left.is_a?(Q::Ast::ConstPathRef)  and left.subast[0].is_a?(Q::Ast::SymbolLiteral)) and operand.to_sym == :"<<")) or (((left.is_a?(Q::Ast::SymbolLiteral) or left.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :">") or
-        ((left.is_a?(Q::Ast::ConstPathRef)  and left.subast[0].is_a?(Q::Ast::SymbolLiteral)) and operand.to_sym == :">"))
+        ((left.is_a?(Q::Ast::ConstPathRef)  and left.subast[0].is_a?(Q::Ast::SymbolLiteral)) and operand.to_sym == :">"))) or (left.is_a?(Ast::ARef) and (((left.of.is_a?(Q::Ast::SymbolLiteral) or left.of.is_a?(Q::Ast::DynaSymbol)) and operand.to_sym == :">") or
+        ((left.of.is_a?(Q::Ast::ConstPathRef)  and left.of.subast[0].is_a?(Q::Ast::SymbolLiteral)) and operand.to_sym == :">")))
       end
       
       attr_reader :to, :what
@@ -2977,8 +3180,8 @@ Q.line = node.line
     class Singleton < Base
       handles Q::Ast::DefS
       include HasBody
-      include HasBody
       include DefaultMemberDeclaration
+      include InferReturn
       
       attr_accessor :symbol, :params, :return_type, :macro_declares
       def initialize *o
@@ -3040,45 +3243,18 @@ Q.line = node.line
 
         return '' if is_macro?
 
+        params.typed.each do |x| get_childrens_scope.locals[x.name] = x.build_str.split(" ")[0] end
+
+
         bs = write_body(ident)
       
         return_type = self.return_type
-        if r_=subast.find do |q| q.is_a?(Return) end
-          qq=r_.subast[0].build_str()
-          if t_ = get_childrens_scope.locals[qq] and t_.type != :infered and !return_type
-            return_type = t_
-            rt = t_.type
-          elsif qq =~ /^\((.*)\)[a-zA-Z]/
-            rt = $1
-            return_type = nil
-          else
-            rt = return_type ? return_type.type : :void
-            #p MT: rt, sym: symbol, qq: qq
-            case qq
-            when /^\"/
-              rt = "string"
-            when /^\@\"/
-              rt = "string"              
-            when /^\'/
-              rt = "char"
-            when /^[0-9]+\./
-              rt = "double"
-            when /^\-[0-9]+\./
-              rt = "double"
-            when /^[0-9]/
-              rt = "int"
-            when /^\-[0-9]/
-              rt = "int"
-            end
-          end 
-        else
-        
-          rt = return_type ? return_type.type : :void
-        end
-
+        rt = infer
+ 
+        rta = (return_type.is_a?(::String) ? return_type =~ /\[\]/ : return_type.array) ? "[]" : '' if return_type
       
         if !static_construct? and !constructor?
-          sig = "#{visibility} static #{rt} "+symbol+"(#{plist.reverse.join(", ")}) {\n"
+          sig = "#{visibility} static #{rt}#{rta} "+symbol+"(#{plist.reverse.join(", ")}) {\n"
         elsif static_construct?
           sig = "static construct {\n"
         elsif constructor?
@@ -3187,9 +3363,13 @@ Q.line = node.line
 Q.line = node.line
 ""
 
-        "(#{params ? params.untyped.map do |p| p.name end.join(", ") : ""}) => {\n" +
+        s="(#{params ? params.untyped.map do |p| p.name end.join(", ") : ""}) => {\n" +
         write_body(ident) + 
         "\n#{get_indent(ident)}}"
+        
+        get_childrens_scope.locals.clear
+        
+        s
       end
       
       def get_childrens_scope
@@ -3626,29 +3806,30 @@ Q.line = node.line
     end    
     
     class DeclaredType < ResolvedType
-      attr_reader :name, :type, :array
-      def initialize n, t, a=nil
+      attr_reader :name, :type, :array, :default
+      def initialize n, t, a=nil, default: false
         @name = n
-    
-        super t,a
+        @default = default
+        super @t=t,a
       end
       
       def build_str ident = 0, p = nil
-Q.line = p.node.line if p
-""
+        Q.line = p.node.line if p
+        ""
 
-     # @type = @t  if @t
-     
-     name = self.name
-     while p=p.parent
-       if p.is_a?(HasModifiers)
-         if p.macro?
-           name = (p.macro_declares[name] ||= p.macro_vcall(name) )
-           break
-         end
-       end
-     end if p
-        (" "*ident) + "#{out? ? "out " : "#{ref? ? "ref " : "#{ owned? ? "owned " : "#{unowned? ? "unowned " : ""}"}"}"}#{type}#{array ? "[]" : ""} #{name}"
+             # @type = @t  if @t
+             
+             name = self.name
+             while p=p.parent
+               if p.is_a?(HasModifiers)
+                 if p.macro?
+                   name = (p.macro_declares[name] ||= p.macro_vcall(name) )
+                   break
+                 end
+               end
+             end if p
+        (" "*ident) + "#{out? ? "out " : "#{ref? ? "ref " : "#{ owned? ? "owned " : "#{unowned? ? "unowned " : ""}"}"}"}#{type}#{array ? "[]" : ""} #{name}"+
+        (default ? " = "+@t.build_str : "")
       end
     end
     
@@ -3666,8 +3847,8 @@ Q.line = p.node.line if p
       end
       
       def build_str ident = 0
-Q.line = node.line
-""
+        Q.line = node.line
+        ""
 
         "#{get_indent(ident)}" +
         subast[0].build_str + "." +
@@ -3682,13 +3863,24 @@ Q.line = node.line
       handles Q::Ast::Params
       
       attr_reader :typed, :untyped
-      def initialize *o
-        super
+      def initialize n,t
+        super n,t
+
+        
+        STDOUT.puts node.inspect
         @typed = node.keywords.map do |n,t|
    
           tt = compiler.handle(t)
           tt= tt.node.value if tt.is_a?(StringLiteral)
           Parameter.new(compiler.handle(n).name, tt)
+        end
+        
+        node.defaults.map do |n,t|
+   
+          tt = compiler.handle(t)
+          #tt= tt.node.value if tt.is_a?(StringLiteral)
+          @typed << p=Parameter.new(compiler.handle(n).name, tt, default:true)
+ 
         end
         
         @untyped = node.ordered.map do |n,t| 
@@ -3822,6 +4014,10 @@ Q.line = node.line
           "#{@construct ? "construct;" : ""}"+
           "#{@default ? "default = #{@default};" : ""}"+
           "}"
+        end
+        
+        def q
+          "#{@q.type}#{@q.array ? "[]" : ""}"
         end
       end
     

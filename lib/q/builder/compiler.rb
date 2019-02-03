@@ -28,6 +28,14 @@ module Q
         "_q_local_#{@n}"
       end
 
+      def class_scope
+        q=member
+        while q and q.scope and q.parent
+          return q if q.parent.is_a?(ValaSourceGenerator::Klass)
+          q = q.parent
+        end
+      end
+      
       def sym
         s=[member.name] rescue []
         q=member
@@ -178,15 +186,16 @@ module Q
       end
       
       marked.each do |q| a.delete(q) end
-      
+   
       klass = a.shift.klass
-
+      Q.line = node.line
       raise unless klass
       
       return klass
     rescue => e
       if !bool
         puts e
+ 
         e.backtrace.each do |l| puts l end
         ev = node.event rescue "none #{node} #{node.class}"
         Q.parse_error ev, node.line

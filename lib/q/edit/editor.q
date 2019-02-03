@@ -27,7 +27,9 @@ namespace module Q
         ssw.add(sm)
         
         sm.notify["style-scheme"].connect() do
-          buffer.style_scheme = sm.style_scheme
+          scheme = sm.style_scheme
+          puts scheme.id
+          buffer.style_scheme = scheme
         end
 
         tsw = Gtk::ScrolledWindow.new(nil,nil)
