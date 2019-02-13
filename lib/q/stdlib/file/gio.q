@@ -62,13 +62,14 @@ namespace module Q
       return len
     end
     
-    def check() :bool
+    def check()
       if etag!=nil and Q::File.exist?(path_name)
         if Q::File.is_modified?(path_name, etag)
           @_modification_type = Q::FileModType::CHANGE
           modified(@modification_type);
           return true
         end
+        
       end
 
       if etag!=nil and !Q::File.exist?(path_name)
@@ -83,7 +84,7 @@ namespace module Q
       return false
     end
     
-    def refresh() :string
+    def refresh()
       begin
         if Q::File.exist?(path_name)
           @_etag = Q::File.get_etag_for_path(path_name)
@@ -95,13 +96,13 @@ namespace module Q
       end
       
       @_modification_type = Q::FileModType::NONE
-      return etag
+      return @etag
     end
   
     def replace(s:string); Q.write(path_name, s); refresh(); end      
 
       
-    def self.open(path: :string, mode: :Q::FileIOMode?, cb: :open_cb?) :'Q.File?'
+    def self.open(path: :string, mode: :Q::FileIOMode?, cb: :open_cb?) :Q::File?
       if !Q::File.exist?(path)
         if mode != Q::FileIOMode::READ
           Q::File.touch(path)
@@ -117,8 +118,8 @@ namespace module Q
       `GLib.File.new_for_path(#{f}).get_basename()`    
     end    
     
-    def basename(f:string)
-      Q::File.basename(f)
+    def basename(f:string) :string
+      return Q::File.basename(f)
     end       
     
     def read() :string

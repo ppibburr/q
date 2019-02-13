@@ -514,6 +514,13 @@ module Q
       end
     end
 
+    class MAssign < Event
+      include HasArguments
+      register do
+        :massign
+      end
+    end
+
 
     class Program < Event
       include HasArguments
@@ -981,6 +988,9 @@ module Q
     end 
     
     def Q.parse_error event, line, e=nil
+      puts EVENT: event
+      puts e
+      puts e.backtrace.reverse.join("\n") if e
       puts "\n\n" 
       puts `ruby -c #{filename}`
       exit

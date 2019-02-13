@@ -90,8 +90,23 @@ namespace module Q
     else
       r = c+"/"+f
     end
+    o = :string[0]
+    i = -1
+    r.split("/").each do |q|
+      i = i-1 if q == ".."
+      
+      if q != ".."
+        i += 1
+        
+        if o.length-1 < i
+          o << q 
+        else
+          o[i] = q 
+        end
+      end
+    end
     
-    return r
+    return string.joinv("/", o[0..i+1])
   end
 end
 

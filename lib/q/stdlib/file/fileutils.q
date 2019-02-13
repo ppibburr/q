@@ -16,7 +16,7 @@ namespace module Q
       `#endif`
     end
       
-    def self.open(path: :string, mode: :Q::FileIOMode?, cb: :open_cb?) :'Q.File?'
+    def self.open(path: :string, mode: :Q::FileIOMode?, cb: :open_cb?) :Q::File?
       if !Q::File.exist?(path)
         if mode != Q::FileIOMode::READ
           Q::File.touch(path)

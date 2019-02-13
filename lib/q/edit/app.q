@@ -1,153 +1,124 @@
 require "Q/edit/window"
+require "Q/opts.q"
 
 namespace module Q
   namespace module Edit
     class Application < Gtk::Application
       @editor     = :Editor
-      @window     = :Gtk::ApplicationWindow?
+      @window     = :Q::Edit::ApplicationWindow?
       @toolbar    = :Gtk::Toolbar
-      @init_files = :'GLib.File[]?'
 
       def self.new(name: :string?)
         flags = GLib::ApplicationFlags::HANDLES_OPEN | GLib::ApplicationFlags::HANDLES_COMMAND_LINE
         _name = name != nil ? name : "org.qedit.application"
-    
-        Object(application_id:_name, flags:flags)      
 
-        set_option_context_summary(get_help_summary())
+        Object(application_id:_name, flags:flags)
 
-        #startup.connect() do activate() end
-
-        open.connect() do |files,hint|      
-          if @window == nil
-            @init_files = files
-            activate()
-            next
-          end
-
-          open_files(files)
-        end
-        
         command_line.connect() do |cl|
-          aa=cl.get_arguments()
+          parse_opts(cl)
+  
+          register();activate()
           
-          (aa.length-1).times do |i|
-            if i > 0
-              a = aa[i]
-              
-              if a =~ /^\-\-(.*?)\=(.*)/
-                on_opt_value(cl, $1, Shell.unquote($2))
-              elsif a =~ /^\-\-(.*)/
-                on_opt(cl, $1)
-              else
-                puts "FILE: #{a} -- #{Q::File.expand_path(a, cl.get_cwd())}"
-                GLib::Idle.add() do editor.open_file(Q::File.expand_path(a, cl.get_cwd())); next false; end
-              end
-            end
-          end
-          
-          register()
-          activate()
-         
           return 0
         end
       end
-      
-      def on_opt(cl:ApplicationCommandLine, o:string);
-        if o=="session-list"
-          cl.print("%s\n", Session.list(editor))
-          exit(0) if nil == @window
-        elsif o == "session-active"
-          cl.print("%s\n", Session.list_active(editor))
-          exit(0) if nil == @window
-        elsif o == "session-clear"
-          Session.clear(editor)
-        elsif o == "session-restore"
-          @window.present()
-          Session.restore(editor)
-        elsif o == "session-save"
-          Session.save(editor)
-        elsif o == "list-schemes"
-          for id in Gtk::SourceStyleSchemeManager.get_default().scheme_ids
-            cl.print("%s\n", id)
-          end
-          exit(0) if nil == @window
-        elsif o == "close-all"
-          editor.close_all()
-        end
-      end
-      
-      def on_opt_value(cl:ApplicationCommandLine, o:string, v:string); 
-        if o=="session"
-          GLib::Idle.add() do
-            editor.session = Q::expand_path(v, cl.get_cwd())
-            @window.present()
-            next false
-          end
-        elsif o=="find"
-          @editor.each_view() do |vw|
-            i = -1
-            
-            for l in vw.edit_view.buffer.text.split("\n")
-              i += 1
-              cl.print("%s\n", "#{vw.edit_view.path_name}: line #{i}]  #{l}") if Regex.new(v).match(l)
-            end
-          end
-        elsif o == "completion"
-          editor.load_provider(Q::expand_path(v, cl.get_cwd()))
-        elsif o == "scheme"
-          editor.each_view() do |vw|
-            vw.edit_view.buffer.style_scheme = Gtk::SourceStyleSchemeManager.get_default().get_scheme(v)
-          end
-        end
-      end
-      
-      def get_help_summary()
-        return "  Gtk Code Editor written in Q
-  qedit [OPTION] [FILE1 [...]]     
 
-  OPTIONS:
-    --session-save                 save the session
-    --session-restore              restore the session
-    --session-clear                clear the session
-    --session=SESSION_FILE_PATH    set session SESSION_FILE_PATH
-    --session-list                 list files in session
-    --session-active               list currently editing files
-    
-    --completion=COMPLETION_SOURCE Add SOURCE contents to autocompletion library
-    
-    --find=MATCH                   print locations of occurences of MATCH in open documents
-    
-    --help                         Show this message
-    --version                      Show version info"
-      end
-      
-      override; def activate()
+      override; def activate()        
         return if @window != nil
-      
+        base.activate()
+
         @window = Q::Edit::ApplicationWindow.new(self)
         @editor = (:ApplicationWindow > window).editor
         
         window.show_all()
-
-        open_files(@init_files) if @init_files != nil
-      end
-
-      def open_files(files: :GLib::File[])
-        GLib::Idle.add() do
-          for f in files
-            editor.open_file(f.get_path())
-          end
-          next false
-        end
       end
       
-      def run(argv: :string[]) :int
-        GLib::Idle.add() do
-          exit(0) if is_remote
-          next false
+      def parse_opts(cl: :ApplicationCommandLine)
+        opts = Opts.new()
+        opts.summary = "Lightweight IDE written in Q."
+        opts['help'].on.connect() do cl.print("%s\n", opts.help()); exit(0) if @window == nil; end
+        
+        opts.add("session", "Set the session", typeof(Q::File)).on.connect() do |s|
+          GLib::Idle.add() do
+            @editor.session = Q::expand_path(:string > s, cl.get_cwd()) if s != nil
+            @window.present()
+            next false
+          end
         end
-        return super(argv)
+      
+        opts.add("session-save", "Save the session").on.connect() do |s|
+          Session.save(@editor)
+        end
+        
+        opts.add("session-clear", "Clear the session").on.connect() do |s|
+          Session.clear(@editor)
+        end
+        
+        opts.add("session-restore", "Restore the session").on.connect() do |s|
+          Session.restore(@editor)
+        end
+        
+        opts.add("session-list", "List files of the session").on.connect() do |s|
+          cl.print("%s\n", Session.list(editor))
+          exit(0) if nil == @window
+        end  
+        
+        opts.add("list", "List files of the editor").on.connect() do |s|
+          cl.print("%s\n", Session.list_active(editor))
+          exit(0) if nil == @window
+        end   
+        
+        opts.add("schemes", "List color schemes").on.connect() do |s|
+          for id in Gtk::SourceStyleSchemeManager.get_default().scheme_ids
+            cl.print("%s\n", id)
+
+            cl.print("%s","\0")
+            
+          end
+          exit(0) if nil == @window
+        end         
+        
+        opts.add("search", "set search text", typeof(:string)).on.connect() do |s|
+          @window.find_widget.text = :string.s
+        end  
+        
+        opts.add("replace", "replace text", typeof(:string)).on.connect() do |s|
+          @editor.current.edit_view.search.settings.search_text = @window.find_widget.text
+          @editor.current.replace(@window.find_widget.text, :string > s)
+        end   
+
+        opts.add("replace-all", "replace all text", typeof(:string)).on.connect() do |s|
+          @editor.current.edit_view.search.settings.search_text = @window.find_widget.text
+          @editor.current.replace_all(@editor.current.edit_view.search.settings.search_text, :string > s)
+        end                   
+        
+        opts.add("find", "Find STRING in active files (regexp)", typeof(:string)).on.connect() do |q|
+          @editor.each_view() do |vw|
+            i = -1
+            
+            for l in vw.buffer.text.split("\n")
+              i += 1
+              cl.print("%s\n", "#{vw.path_name}: line #{i}]  #{l}") if Regex.new(:string > q).match(l) if q!=nil
+            end
+          end
+        end             
+       
+        opts.add("completion", "load completion words from FILE", typeof(Q::File)).on.connect() do |f|
+          editor.load_provider(Q::expand_path(:string > f, cl.get_cwd())) if f != nil
+        end
+        
+        opts.add("active", "defer to the active document")
+        
+        Settings.default().attach_opts(self, opts, cl)
+        
+        GLib::Idle.add() do 
+          for f in opts.parse(cl.get_arguments())
+            puts "FILE: #{f} -- #{Q::File.expand_path(f, cl.get_cwd())}"
+            editor.open_file(Q::File.expand_path(f, cl.get_cwd()))
+           end
+           cl.unref()
+          next false
+        end      
       end
     end
   end

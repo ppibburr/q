@@ -26,7 +26,7 @@ namespace module Q
         
         for i in 0..(editor.book.get_n_pages()-1)
           list << "\n" if i > 0
-          list << editor.get_nth_view(i).edit_view.path_name
+          list << editor.get_nth_view(i).path_name
         end
         
         Q::File.write(editor.session, list)
@@ -36,7 +36,7 @@ namespace module Q
         list = :string[0]
         
         for i in 0..(editor.book.get_n_pages()-1)
-          list << editor.get_nth_view(i).edit_view.path_name
+          list << editor.get_nth_view(i).path_name
         end
         
         return string.joinv(" ", list)

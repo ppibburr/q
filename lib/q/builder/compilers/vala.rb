@@ -1839,17 +1839,23 @@ end
             return declare_field(type)+ "; " + (bool ? '' : assign_local)
           elsif !subast[0].is_a?(ARefField)
             return declare_field(DeclaredType.new(variable.symbol, nil), ident)
+         
           end
         end
+ 
+        #if variable.is_a?(ARefField)
+        
+           # STDOUT.puts variable.name
+            #end
  
         _new = ""
         if (value.is_a?(Command) or value.is_a?(VCall) or value.is_a?(VarRef) or value.is_a?(Call) or value.is_a?(MethodAddArg)) and m=value.is_macro?
                       vs = value.build_str
                       if m.rval
                     
-                        return vs+"\n#{variable.symbol} = #{m.rval};"
+                        return vs+"\n#{variable.symbol}#{do_sets_field} = #{m.rval};"
                       else
-                        return "#{variable.symbol} = #{vs};"
+                        return "#{variable.symbol}#{do_sets_field} = #{vs};"
                       end
         end
         "#{variable.symbol}#{do_sets_field} = #{_new}#{value.build_str(ident).strip}"
@@ -1917,7 +1923,7 @@ end
             end
             "#{qqq}#{vv} #{variable.symbol} = #{val_str}"
           end
-        elsif type.infered? and value.build_str =~ /^\((.*)\)[a-zA-Z0-9]/
+        elsif type.infered? and value.build_str =~ /^\((.*)\)[a-zA-Z0-9]+$/
           n=value.node
           "#{$1} #{variable.symbol} = #{value.build_str}"
         elsif scope.member.parent.is_a?(PropertyWithBlock)
@@ -1946,7 +1952,8 @@ end
           elsif type.nullable?
             "#{type.build_str} = null"
           else
-            "#{type.build_str(0,self)}"
+            return "#{type.build_str(0,self)}" if !type.infered?
+            "var #{variable.symbol} = #{value.build_str}"
           end
         end
       end
@@ -2001,6 +2008,20 @@ Q.line = node.line
       end
     end
 
+    class MAssign < Base
+      handles Q::Ast::MAssign
+    
+      def build_str ident=0
+        a=[]
+        (t=subast[1].build_str)
+        t = t + "[]" if subast[1].is_a?(ArrayDeclaration)
+        s=t+" "+subast[0].subast.map do |v| a << v.variable.name; a[-1] end.join(", ")
+        
+        a.each do |n| scope.locals[n] = t end
+        s
+      end
+    end
+    
     
     class Field < Assign
 
@@ -3193,8 +3214,9 @@ Q.line = node.line
         
         @subast = node.body.subast[0].children.map do |c| compiler.handle(c) end
         @subast.each do |c| c.parented self end
-        
-        if subast[0].is_a?(Type) or (subast[0].is_a?(ConstPathRef) and subast[0].subast[0].is_a?(Type))
+   
+        #STDOUT.puts subast[0].node.inspect if subast[0] 
+        if (subast[0].is_a?(Type) or (subast[0].is_a?(ConstPathRef) and subast[0].subast[0].is_a?(Type))) or (subast[0].is_a?(Call) and (subast[0].target.is_a?(Type)))
           @return_type = ResolvedType.new(subast.shift)
         end
         
@@ -3867,7 +3889,7 @@ Q.line = node.line
         super n,t
 
         
-        STDOUT.puts node.inspect
+        #STDOUT.puts node.inspect
         @typed = node.keywords.map do |n,t|
    
           tt = compiler.handle(t)

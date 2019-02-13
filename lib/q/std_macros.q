@@ -45,7 +45,13 @@ namespace module Q
 
     macro; def mkdir_p(path)
       GLib::DirUtils.create_with_parents(path, 755)
-    end    
+    end  
+    
+    macro; def glob(path)
+      glob = Posix.Glob()
+      glob.glob(path,0,nil)
+      return glob.pathv
+    end  
   end
   
   macro; def cwd()

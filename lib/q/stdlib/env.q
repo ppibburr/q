@@ -32,7 +32,7 @@ namespace module Q
     end
   end
   
-  def self.env() :'GLib.HashTable'[:string?, :string?]
+  def self.env() :'GLib.HashTable<string?, string?>'
     e = Q::Env.to_h()
     return e
   end
