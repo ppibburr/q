@@ -76,13 +76,13 @@ namespace module Q
 
       def connect_keys()
         key_press_event.connect() do |event|
-          if (event.key.state == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))
-            if event.key.keyval == 83
+          if ((event.key.state & Gtk.accelerator_get_default_mod_mask()) == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))
+            if event.key.keyval == Gdk::Key::S
               prompt_save()
               next true
             end  
            
-            if event.key.keyval == 82
+            if event.key.keyval == Gdk::Key::R
               iter = :Gtk::TextIter
         
               buffer.get_iter_at_offset(:out.iter, buffer.cursor_position)
@@ -105,19 +105,19 @@ namespace module Q
               next true
             end
           end
-          
-          if (event.key.state == Gdk::ModifierType::CONTROL_MASK)
-            if event.key.keyval == 115
+
+          if ((event.key.state & Gtk.accelerator_get_default_mod_mask()) == Gdk::ModifierType::CONTROL_MASK)
+            if event.key.keyval == Gdk::Key::s
               save_file()
               next true;
             end
 
-            if event.key.keyval == 102
+            if event.key.keyval == Gdk::Key::f
               show_find()
               next true
             end
 
-            if event.key.keyval == 108
+            if event.key.keyval == Gdk::Key::l
               show_goto()
               next true;
             end

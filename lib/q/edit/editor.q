@@ -168,6 +168,7 @@ namespace module Q
 
         box   = Gtk::Box.new(Gtk::Orientation::HORIZONTAL, 0)
         close = Gtk::Button.new();
+        close.relief = Gtk::ReliefStyle::NONE
         label = Gtk::Label.new("Untitled Document");
         
         close.image = Gtk::Image.new_from_icon_name("gtk-close", Gtk::IconSize::MENU)
