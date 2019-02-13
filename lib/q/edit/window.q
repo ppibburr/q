@@ -176,7 +176,7 @@ namespace module Q
         
         key_press_event.connect() do |event|
           if (event.key.state == Gdk::ModifierType::CONTROL_MASK)
-            if event.key.keyval == 113
+            if event.key.keyval == Gdk::Key::q
               application.quit()
               next true
             end

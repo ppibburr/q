@@ -2051,11 +2051,13 @@ Q.line = node.line
         when :constant
           "public const " + declare_field()
         when :class
-          "public static "+declare_field()
+           vis = variable.name =~ /^\@\@\_\_[a-z]/ ? "private": "public"
+          "#{vis} static "+declare_field()
         when :global
           "public class "+declare_field()
         when :instance
-          "public "+declare_field()
+           vis = variable.name =~ /^\@\_[a-z]/ ? "private": "public"
+          "#{vis} "+declare_field()
         else
           raise "Bad Field"
         end

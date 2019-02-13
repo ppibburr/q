@@ -59,12 +59,12 @@ namespace module Q
         
         terminal.key_press_event.connect() do |event|
           if (event.key.state == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))
-            if event.key.keyval == 86
+            if event.key.keyval == Gdk::Key::V
               terminal.paste_clipboard()
               next true
             end        
           
-            if event.key.keyval == 67
+            if event.key.keyval == Gdk::Key::C
               terminal.copy_clipboard()
               next true
             end          
@@ -74,20 +74,20 @@ namespace module Q
         end
         
         key_press_event.connect() do |event|
-          if (event.key.state == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))          
+          if ((event.key.state & Gtk.accelerator_get_default_mod_mask()) == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))          
             if event.key.keyval == 81
               save_all()
               next true
             end        
           end
           
-          if (event.key.state == Gdk::ModifierType::CONTROL_MASK)
-            if event.key.keyval == 111
+          if ((event.key.state & Gtk.accelerator_get_default_mod_mask()) == Gdk::ModifierType::CONTROL_MASK)
+            if event.key.keyval == Gdk::Key::o
               prompt_open()
               next true
             end
             
-            if event.key.keyval == 110
+            if event.key.keyval == Gdk::Key::n
               add_view()
               
               next true
