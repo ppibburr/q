@@ -1,6 +1,5 @@
-Q::package(:"gtk+-3.0")
 
-namespace module QUI
+namespace module Q; namespace module UI
   class Stock
     OPEN  = "gtk-open"
     CLOSE = "gtk-close"
@@ -13,6 +12,9 @@ namespace module QUI
     PREFERENCES = "gtk-preferences"
     INFO        = "gtk-dialog-info"
     EXECUTE     = "gtk-execute"
+    GO_FORWARD  = "gtk-go-forward"
+    GO_BACK     = "gtk-go-back"
+    REFRESH     = "gtk-refresh"
   end
 
   class ToolButton < Gtk::ToolButton
@@ -28,4 +30,4 @@ namespace module QUI
       self.image = Gtk::Image.new_from_icon_name(item, Gtk::IconSize::BUTTON)
     end
   end
-end
+end;end

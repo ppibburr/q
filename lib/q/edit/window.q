@@ -12,8 +12,7 @@ namespace module Q
       def self.new(app: :Gtk::Application)
         Object(application:app)
 
-        icontheme = Gtk::IconTheme.get_default()
-        @icon = icontheme.load_icon(Gtk::STOCK_EDIT, 24, 0)
+        @icon = Gtk::IconTheme.get_default().load_icon(Gtk::STOCK_EDIT, 24, 0)
 
         @editor = Editor.new()
 

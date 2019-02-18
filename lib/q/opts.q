@@ -68,12 +68,12 @@ class Opts
           end
           invalid($1) if o == nil
         else
-          exp = Q::File.expand_path(a, cl.get_cwd())
-          fa = Q::Dir.glob(exp)
-          for f in fa
-            aa << f
-          end
-          aa << exp if fa.length == 0
+          #exp = Q::File.expand_path(a, cl.get_cwd())
+          #fa = Q::Dir.glob(exp)
+          #for f in fa
+            #aa << f
+          #end
+          aa << a #if fa.length == 0
         end 
         
         o.on(o.value) if o!=nil

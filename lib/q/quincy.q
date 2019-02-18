@@ -86,6 +86,8 @@ namespace module Quincy
 
         return Q.read(f)
       end
+      
+      return nil
     end
 
     def request_body() :string?
