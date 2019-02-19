@@ -17,10 +17,11 @@ namespace module Q
         self.group_name = "any"
        
         create_window.connect() do |w,x,y|
-           app = :Application > GLib::Application.get_default()
-           n = Window.new(app)
-           app.add_window(n)
-          `weak Session wk = n.book;`
+          app = :Application > GLib::Application.get_default()
+          n = Window.new(app)
+          app.add_window(n)
+          wk = :Session.weak
+          wk = n.book;
           next wk
         end
       end
@@ -32,7 +33,11 @@ namespace module Q
           open()
         end
         
-        added.connect() do |d|        
+        added.connect() do |d|  
+          d.notify["title"].connect() do
+            get_tab(d).label = d.title
+          end
+              
           d.create.connect() do 
             n = Document.new(Settings.get_default())
             append(n)

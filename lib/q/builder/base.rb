@@ -16,6 +16,7 @@ class Q::Require
   def initialize ast
     @line = ast.line
     @source = Q.filename
+
     @path = Q.src.split("\n")[ast.line-1].strip.gsub(/^require /,'').gsub(/'|"/,'').strip.split(";")[0]
   end
   

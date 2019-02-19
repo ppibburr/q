@@ -70,8 +70,13 @@ namespace module Q
         get_completion().add_provider(@_autocomplete)      
 
         WordProvider.q().attach(self)
-        self.background_pattern = Gtk::SourceBackgroundPatternType::GRID
+        
         connect_keys()
+        
+        buffer.modified_changed.connect() do 
+          puts "modified"
+          modify()
+        end
       end
 
       def connect_keys()
@@ -287,11 +292,15 @@ namespace module Q
           
           return
         else
-			    buffer.set_modified(false);
           file.check()
+          if buffer.text =~ /\n$/
+          else
+            buffer.text = buffer.text+"\n"
+          end
 			    @file.replace(buffer.text)
 			    file_saved()
-
+			    buffer.set_modified(false);
+			    modify()
           puts "SAVED: #{@path_name}"
         end
       end   
@@ -316,24 +325,63 @@ namespace module Q
       signal; def file_saved(); end
       signal; def file_loaded(file:string); end
       signal; def external_modify(f: :Q::File, mt: :Q::FileModType); end
+      signal; def modify(); end
     end
 
-    class EditWidget < Gtk::ScrolledWindow
+    class EditWidget < Gtk::VBox
       @edit_view = :EditView
-
+      @info_bar  = :Gtk::InfoBar
+      @modify_label = :Gtk::Label
+      
       def initialize()
         @edit_view = EditView.new()
 
         edit_view.file_saved.connect() do file_saved() end
-        edit_view.file_loaded.connect() do |f|  file_loaded(f) end
-        edit_view.external_modify.connect() do |f,mt| external_modify(f,mt) end
+        edit_view.file_loaded.connect() do |f| 
+          @info_bar.hide()
+          file_loaded(f)
+        end
+       
+        edit_view.external_modify.connect() do |f,mt| 
+          @info_bar.show()
+          if mt == Q::FileModType::CHANGE
+            @modify_label.label = "The file had been changed on disk. What Would you like to do?"
+            (:Gtk::Container > @info_bar.get_action_area()).get_children().nth_data(2).show()
+          end 
+          if mt == Q::FileModType::DELETE
+            @modify_label.label = "The file no longer EXISTS. What Would you like to do?" 
+            (:Gtk::Container > @info_bar.get_action_area()).get_children().nth_data(2).hide()
+          end
+          external_modify(f,mt)
+        end
+        
         edit_view.show_find.connect() do show_find() end
         edit_view.show_goto.connect() do show_goto() end
+        edit_view.modify.connect() do
+          @info_bar.hide() if !edit_view.buffer.get_modified()
+          modify()
+        end
                                 
-        add(@edit_view)
+        @modify_label = Gtk::Label.new("")                        
+        @info_bar = Gtk::InfoBar.new_with_buttons("gtk-refresh", 1, "gtk-save", 2, "gtk-close", 3)
+        @info_bar.get_content_area().add(@modify_label)
+        pack_start(@info_bar,false,false,0)
         
-        set_policy(Gtk::PolicyType::AUTOMATIC, Gtk::PolicyType::AUTOMATIC)
-        set_shadow_type(Gtk::ShadowType::IN)
+        @info_bar.response.connect() do |r|
+          load_file(path_name) if r == 1
+          if r == 2
+            save_file()
+            @info_bar.hide() 
+          end
+          close(true) if r == 3
+        end
+                                
+        sw = Gtk::ScrolledWindow.new(nil,nil)                         
+        pack_start(sw,true,true,0)
+        sw.add(@edit_view)
+        
+        sw.set_policy(Gtk::PolicyType::AUTOMATIC, Gtk::PolicyType::AUTOMATIC)
+        sw.set_shadow_type(Gtk::ShadowType::IN)
       end
       
       property path_name:string do
@@ -403,13 +451,21 @@ namespace module Q
       
       def replace_all(q:string, w:string)
         @edit_view.replace_all(q,w)
-      end                    
+      end      
+      
+      override;def show_all();
+        super()
+        @info_bar.hide() if !edit_view.file.check() || edit_view.file == nil
+      end              
       
       signal; def show_find(); end
       signal; def show_goto(); end
       signal; def file_saved(); end
       signal; def file_loaded(file:string); end
-      signal; def external_modify(f: :Q::File, mt: :Q::FileModType); end                                       
+      signal; def external_modify(f: :Q::File, mt: :Q::FileModType); end   
+      signal;def modify();end  
+      signal;def close(b:bool); end                                  
     end  
   end
 end
+ 

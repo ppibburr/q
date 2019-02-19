@@ -59,15 +59,19 @@ namespace module Q
         (:Gtk::Widget > t).show()
         added(t)
         tl.close.clicked.connect() do 
-          for i in 0..length-1
-            remove_page(i) if get(i) == t
-          end
+          remove(t)
         end
         set_tab_detachable(:Gtk::Widget > t, true)
         self.page = -1
         v = :Value
         v = true
         child_set_property(:Gtk::Widget > t, "tab-expand", v)
+      end
+      
+      def remove(t: :T)
+        for i in 0..length-1
+          remove_page(i) if get(i) == t
+        end
       end
       
       new;def get(i:int) :T

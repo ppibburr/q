@@ -1,4 +1,4 @@
-
+Q::package(:"json-glib-1.0")
 namespace module Q
   namespace module Edit
     class Settings < GLib::Object
@@ -84,10 +84,43 @@ namespace module Q
       
       signal;def update(p:string, v:Value); end
       
-      @@_default = :Settings
+      @@__default = :Settings
       def self.default() :Settings
-        @@_default = Settings.new() if @@_default == nil
-        return @@_default
+        @@__default = Settings.new() if @@__default == nil
+        return @@__default
+      end
+      
+      def self.from_json(s:string) :Settings
+        obj = Json.gobject_from_data(typeof(:Q::Edit::Settings), s);
+        return :Edit::Settings > obj
+      end
+      
+      def apply_from_json(s:string)
+        o = Settings.from_json(s)
+        for p in (:ObjectClass.typeof(:Settings).class_ref()).list_properties()
+          v = :Value
+          if p.value_type == typeof(:string)
+            v = ""
+            o.get_property(p.name, :ref.v)
+            set_property(p.name, v)
+          elsif p.value_type == typeof(:bool)
+            v = false
+            o.get_property(p.name, :ref.v)
+            set_property(p.name, v)
+          elsif p.value_type == typeof(:int)
+            v = 0
+            o.get_property(p.name, :ref.v)
+            set_property(p.name, v)
+          end
+        end
+      end
+      
+      def to_string() :string
+        root = Json.gobject_serialize(self);
+
+	      generator = Json::Generator.new();
+	      generator.set_root(root);
+	      return generator.to_data(nil);
       end
       
       def attach_opts(app: :Application, opts:Opts, cl: :ApplicationCommandLine?)
@@ -136,7 +169,15 @@ namespace module Q
         opts.add("scheme", "set color scheme", typeof(:string)).on.connect() do |s|
           Settings.default().scheme = :string > s if !active
           app.editor.current.scheme = :string > s if active
-        end                       
+        end  
+        
+        opts.add("load-settings", "Load settings from json FILE", typeof(:Q::File)).on.connect() do |v|
+          Settings.default().apply_from_json(Q.read(Q.expand_path(:string > v,cl.get_cwd())))
+        end 
+        
+        opts.add("dump-settings", "Save settings to json FILE", typeof(:Q::File)).on.connect() do |v|
+          Q.write(Q.expand_path(:string > v,cl.get_cwd()), Settings.default().to_string())
+        end                    
       end
     end
   end

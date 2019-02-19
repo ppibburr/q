@@ -1,15 +1,16 @@
 require "Q/edit/edit_view"
+require "Q/edit/window"
 
 namespace module Q
   namespace module Edit
     class Editor < Gtk::Paned
-      @book      = :Gtk::Notebook
+      @book      = :Q::UI::Tabbed[:EditWidget]
       @stack     = :Gtk::Stack
       @terminal  = :Vte::Terminal
       @providers = :Hash[:WordProvider?]
       
       def initialize()
-        @book      = Gtk::Notebook.new()
+        @book      = Q::UI::Tabbed[:EditWidget].new()
         @stack     = Gtk::Stack.new()
         @terminal  = Vte::Terminal.new()
         @providers = Hash[:WordProvider?].new()
@@ -97,6 +98,16 @@ namespace module Q
           next false
         end
 
+        book.create_window.connect() do |w,x,y|
+          app = :Application > GLib::Application.get_default()
+          n = Q::Edit::ApplicationWindow.new(app)
+          n.show_all()
+          app.add_window(n)
+          wk = :Q::UI::Tabbed.weak
+          wk = n.editor.book;
+          next wk
+        end
+
         book.switch_page.connect() do
           GLib::Idle.add() do
             view_changed()
@@ -166,29 +177,33 @@ namespace module Q
           set_tab_label(widget, Q::File.basename(f))
         end     
 
-        box   = Gtk::Box.new(Gtk::Orientation::HORIZONTAL, 0)
-        close = Gtk::Button.new();
-        close.relief = Gtk::ReliefStyle::NONE
-        label = Gtk::Label.new("Untitled Document");
+        widget.close.connect() do |b|
+          book.remove(widget) if b
+        end
+
+        book.append(widget)
+        book.show_all()
         
-        close.image = Gtk::Image.new_from_icon_name("gtk-close", Gtk::IconSize::MENU)
-        close.clicked.connect() do
+        book.get_tab(widget).label = "Untitled Document"
+        
+        tab_for_child(widget).close.clicked.connect() do
           close_view(widget)
         end
-    
-        box.pack_start(label, true,true, 0)
-        box.pack_start(close, false,false,0)
-
-        box.show_all()
-
-        book.append_page(widget, box)
-        book.show_all()
-        book.page = -1
 
         add_completions(widget)
 
         widget.edit_view.file_loaded.connect() do |path|
           set_tab_label(widget, Q::File.basename(path))
+        end
+
+        widget.modify.connect() do
+          if widget.edit_view.file != nil
+            if widget.edit_view.buffer.get_modified()
+              set_tab_label(widget, "* "+Q::File.basename(widget.path_name))
+            else
+              set_tab_label(widget, Q::File.basename(widget.path_name))
+            end
+          end
         end
 
         return widget 
@@ -252,30 +267,30 @@ namespace module Q
         current.edit_view.set_font(desc)
       end
 
-      def tab_for_child(c:EditWidget) :Gtk::Box
-        return :Gtk::Box > book.get_tab_label(c)
+      def tab_for_child(c:EditWidget) :Q::UI::Tabbed::Tab
+        return book.get_tab(c)
       end
 
       def set_tab_label(c:EditWidget, s:string)
-        (:Gtk::Label > tab_for_child(c).get_children().nth_data(0)).label = s
+        tab_for_child(c).label = s
         v = :Value
         v = s
         book.child_set_property(c, 'menu-label', v)
       end
 
       def get_nth_view(i:int)
-        return :EditWidget? > book.get_nth_page(i)
+        return :EditWidget? > book.get(i)
       end
       
       def get_n_views() :int
-        return book.get_n_pages()
+        return book.length
       end 
       
       delegate;def each_cb(w:EditWidget); end
       
       def each_view(cb:each_cb)
-        for i in 0..(get_n_views()-1)
-          cb(get_nth_view(i))
+        for v in book
+          cb(v)
         end
       end
       
@@ -299,17 +314,15 @@ namespace module Q
       end
 
       def get_view_for_path(path:string) :EditWidget?
-        for i in 0..(get_n_views()-1)
-          return get_nth_view(i) if get_nth_view(i).edit_view.path_name == path
+        for w in book
+          return w if w.edit_view.path_name == path
         end
 
         return nil
       end
       
       def set_view(view:EditWidget)
-        for i in 0..(get_n_views()-1)
-          book.page = i if get_nth_view(i) == view
-        end    
+        book.view = view   
       end
 
       signal; def view_changed(); end
@@ -323,12 +336,12 @@ namespace module Q
       end
 
       property current: :EditWidget do
-        get do return :EditWidget > book.get_nth_page(book.get_current_page()) end
+        get do :owned; return book.current end
       end
 
-      property current_tab: :Gtk::Box do
-        get do
-          return :Gtk::Box > book.get_tab_label(current)
+      property current_tab: :Q::UI::Tabbed::Tab do
+        get do :owned
+          return book.current_tab
         end
       end
 

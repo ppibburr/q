@@ -65,7 +65,7 @@ module Q
 
     class Event < Node
       attr_accessor :event
-      def initialize event, line
+      def initialize event, line, *o
         @event = event
         super line
       end
@@ -401,6 +401,12 @@ module Q
         @value = arguments.shift
       end      
     end           
+
+    class RestParam < Event
+
+     register do :rest_param end
+    end
+    
 
     class MethodAddArg < Event
      include HasArguments
@@ -839,7 +845,7 @@ module Q
         
         @ordered = arguments.shift || []
         @defaults = arguments.shift || []
-        _ = arguments.shift
+        @swarm = arguments.shift
         _ = arguments.shift
         @keywords = arguments.shift || []
         @arguments = []

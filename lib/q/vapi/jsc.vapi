@@ -54,8 +54,7 @@ namespace JSC {
     public Value object_get_property(string n);
   }  
   
-  [Compact]
-  [CCode (cname = "void", free_function = "g_object_unref")]
+  [CCode (cname = "JSCContext", free_function = "g_object_unref")]
   public class Context : GLib.Object {
     public Value evaluate(string code, size_t len);
     public Value get_global_object();

@@ -27,7 +27,9 @@ namespace module Q
           register()
           activate()
       
-          cl.unref()
+          cl.ref_count.times do |i|
+            cl.unref()
+          end
       
           return 0
         end      

@@ -1,16 +1,16 @@
 require "Q/edit/editor"
-require "Q/qui"
+require "Q/ui"
 
 namespace module Q
   namespace module Edit
-    class ApplicationWindow < Gtk::ApplicationWindow
+    class ApplicationWindow < Q::UI::ApplicationWindow
       @toolbar     = :Gtk::Toolbar
       @editor      = :Editor
       @find_widget = :Gtk::SearchEntry
       @line        = :Gtk::SpinButton
       
-      def self.new(app: :Gtk::Application)
-        Object(application:app)
+      def self.new(app: :Q::Edit::Application)
+        Object(application:app) 
 
         @icon = Gtk::IconTheme.get_default().load_icon(Gtk::STOCK_EDIT, 24, 0)
 
@@ -35,25 +35,25 @@ namespace module Q
         
         toolbar.get_style_context().add_class(Gtk.STYLE_CLASS_PRIMARY_TOOLBAR);
 
-		    new_button = QUI::ToolButton.new_from_stock(QUI::Stock::NEW);
+		    new_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::NEW);
 		    toolbar.add(new_button);
         new_button.clicked.connect() do
           editor.add_view()
         end
 
-        open_button = QUI::ToolButton.new_from_stock(QUI::Stock::OPEN);
+        open_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::OPEN);
 		    toolbar.add(open_button)
 		    open_button.clicked.connect() do
 		      editor.prompt_open()
 		    end
 
-        save_button = QUI::ToolButton.new_from_stock(QUI::Stock::SAVE);
+        save_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::SAVE);
 		    toolbar.add(save_button)
         save_button.clicked.connect() do
           editor.current.edit_view.save_file()
         end
 
-        save_as_button = QUI::ToolButton.new_from_stock(QUI::Stock::SAVE_AS);
+        save_as_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::SAVE_AS);
 		    toolbar.add(save_as_button)
         save_as_button.clicked.connect() do
           editor.current.edit_view.prompt_save()
@@ -61,13 +61,13 @@ namespace module Q
 
         toolbar.add(Gtk::SeparatorToolItem.new())
         
-        config_button = QUI::ToolButton.new_from_stock(QUI::Stock::PREFERENCES);
+        config_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::PREFERENCES);
 		    toolbar.add(config_button)
 
-        notes_button = QUI::ToolButton.new_from_stock(QUI::Stock::INFO);
+        notes_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::INFO);
 		    toolbar.add(notes_button)
 
-        terminal_button = QUI::ToolButton.new_from_stock(QUI::Stock::EXECUTE);
+        terminal_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::EXECUTE);
 		    toolbar.add(terminal_button)      
 
         l = "terminal"
@@ -138,11 +138,11 @@ namespace module Q
         
         toolbar.add(Gtk::SeparatorToolItem.new())      
         
-        quit_button = QUI::ToolButton.new_from_stock(QUI::Stock::QUIT);
+        quit_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::QUIT);
 		    toolbar.add(quit_button)
 		    
 		    quit_button.clicked.connect() do
-		      application.quit()
+		      destroy()
 		    end
       end
 
@@ -150,11 +150,6 @@ namespace module Q
         editor.view_changed.connect() do
           path = editor.file
           self.title = "QEdit - #{path != nil ? path : ""}"
-        end
-
-        delete_event.connect() do
-          application.quit()
-          next false
         end
 
         editor.show_find.connect() do

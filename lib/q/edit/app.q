@@ -3,45 +3,54 @@ require "Q/opts.q"
 
 namespace module Q
   namespace module Edit
-    class Application < Gtk::Application
-      @editor     = :Editor
+    class Application < Q::UI::Application
+      property editor:Editor do get do return (:ApplicationWindow > active_window).editor; end; end
+      
       @window     = :Q::Edit::ApplicationWindow?
       @toolbar    = :Gtk::Toolbar
 
       def self.new(name: :string?)
-        flags = GLib::ApplicationFlags::HANDLES_OPEN | GLib::ApplicationFlags::HANDLES_COMMAND_LINE
         _name = name != nil ? name : "org.qedit.application"
 
-        Object(application_id:_name, flags:flags)
+        super(_name)
 
-        command_line.connect() do |cl|
-          parse_opts(cl)
-  
-          register();activate()
-          
-          return 0
+        mkopts.connect() do |opts, cl|
+          parse_opts(opts, cl)
+        end
+        
+        create_window.connect() do
+          if Settings.default().scheme == "classic"
+            id = :string?
+            id = nil
+            
+            id = "tomorrow" if `""tomorrow" in Gtk.SourceStyleSchemeManager.get_default().scheme_ids`
+            id = "geany"    if `""geany" in Gtk.SourceStyleSchemeManager.get_default().scheme_ids && id == null`
+            id = "classic"  if `""classic" in Gtk.SourceStyleSchemeManager.get_default().scheme_ids && id == null`
+            id = "kate"     if `""kate" in Gtk.SourceStyleSchemeManager.get_default().scheme_ids && id == null`
+            
+            Settings.default().scheme = id
+            puts "QEDIT SCHEME_ID: #{id}"
+          end
+          @window = Q::Edit::ApplicationWindow.new(self)
+          @window.show_all()
+        end
+        
+        open_files.connect() do |fa|
+          for f in fa
+            puts "FILE: #{f} -- #{Q::File.expand_path(f, cl.get_cwd())}"
+            editor.open_file(Q::File.expand_path(f, cl.get_cwd()))
+          end
         end
       end
-
-      override; def activate()        
-        return if @window != nil
-        base.activate()
-
-        @window = Q::Edit::ApplicationWindow.new(self)
-        @editor = (:ApplicationWindow > window).editor
-        
-        window.show_all()
-      end
       
-      def parse_opts(cl: :ApplicationCommandLine)
-        opts = Opts.new()
+      def parse_opts(opts:Opts, cl: :ApplicationCommandLine)
         opts.summary = "Lightweight IDE written in Q."
-        opts['help'].on.connect() do cl.print("%s\n", opts.help()); exit(0) if @window == nil; end
-        
+
         opts.add("session", "Set the session", typeof(Q::File)).on.connect() do |s|
           GLib::Idle.add() do
             @editor.session = Q::expand_path(:string > s, cl.get_cwd()) if s != nil
             @window.present()
+            GLib::Idle.add() do Session.restore(@editor); next false; end
             next false
           end
         end
@@ -109,16 +118,7 @@ namespace module Q
         
         opts.add("active", "defer to the active document")
         
-        Settings.default().attach_opts(self, opts, cl)
-        
-        GLib::Idle.add() do 
-          for f in opts.parse(cl.get_arguments())
-            puts "FILE: #{f} -- #{Q::File.expand_path(f, cl.get_cwd())}"
-            editor.open_file(Q::File.expand_path(f, cl.get_cwd()))
-           end
-           cl.unref()
-          next false
-        end      
+        Settings.default().attach_opts(self, opts, cl)  
       end
     end
   end

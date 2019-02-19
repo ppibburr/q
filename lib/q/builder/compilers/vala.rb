@@ -16,6 +16,24 @@ class Symbol; def type; self; end;
   end
   
   def q; self.to_s; end
+  def build_str ident=0; self.to_s; end
+end
+
+def it t
+  return false if t.is_a?(Q::ValaSourceGenerator::Cast)
+  while t.respond_to?(:arguments) and t.arguments[0]
+  return false if t.is_a?(Q::ValaSourceGenerator::Cast)
+    t = t.arguments[0]
+  end
+  t.is_a?(Q::ValaSourceGenerator::Symbol)
+end
+
+def is_type?(t)
+
+  return false if t.is_a?(Q::ValaSourceGenerator::Cast)
+  t.is_a?(Q::ValaSourceGenerator::ConstPathRef) or t.is_a?(Q::ValaSourceGenerator::Symbol) or t.is_a?(Q::ValaSourceGenerator::DynaSymbol) or (t.is_a?(Q::ValaSourceGenerator::Call) &&
+    it(t.target)
+  )
 end
 
 def type_from_exp(s, c, l)
@@ -144,6 +162,7 @@ def type_from_exp(s, c, l)
   end   
   
   t = l.locals[s]
+  return t.build_str.split(" ")[0..1].join(" ") if t and t.build_str.split(" ")[0].to_s =~ /unowned|weak/
   return t.build_str.split(" ")[0] if t and t.build_str.split(" ")[0].to_s != 'infered'
   
   return nil
@@ -285,7 +304,7 @@ module Q
   
     module HasModifiers
       MODIFIERS = [
-        :public, :private, :static, :class, :delegate, :async, :virtual, :override, :abstract, :signal,:macro,:new
+        :public, :private, :static, :class, :delegate, :async, :virtual, :override, :abstract, :signal,:macro,:new, :weak, :unowned
       ]
     
       MODIFIERS.each do |m|
@@ -356,6 +375,16 @@ Q.line = node.line
         (" "*ident)+"break"
       end
     end
+    
+    class RestParam < Base
+      handles Q::Ast::RestParam
+      def build_str ident = 0
+Q.line = node.line
+""
+
+        (" "*ident)+"..."
+      end
+    end    
     
     module DefaultMemberDeclaration
       include HasModifiers
@@ -1799,7 +1828,7 @@ Q.line = node.line
       end
       
       def is_declaration?
-        (subast[1].is_a?(Type) or (subast[1].is_a?(ConstPathRef) and subast[1].is_a?(Q::Compiler::KnownType))) and !subast[0].is_a?(ARefField)
+        ((subast[1].node.inspect =~ /\=\:symbol/) or subast[1].is_a?(Type) or (subast[1].is_a?(ConstPathRef) and subast[1].is_a?(Q::Compiler::KnownType))) and !subast[0].is_a?(ARefField)
       end
       
       def assign_local ident=0
@@ -1921,6 +1950,7 @@ end
               vv = vt; scope.locals[variable.symbol] = vt
             end
             end
+            
             "#{qqq}#{vv} #{variable.symbol} = #{val_str}"
           end
         elsif type.infered? and value.build_str =~ /^\((.*)\)[a-zA-Z0-9]+$/
@@ -1993,7 +2023,7 @@ Q.line = node.line
             "#{get_indent(ident)}#{scope.is_a?(Q::Compiler::StructScope)? "" : "this."}"+variable.symbol + do_sets_field + " = #{vs}"
           when :local
             if is_declaration?
-              get_indent(ident) + declare_field
+              get_indent(ident) + declare_field + (value.is_a?(Cast) ? " = "+value.build_str : "")
             else
               get_indent(ident) + assign_local(ident)
             end
@@ -3056,7 +3086,7 @@ Q.line = node.line
 
         rta = (return_type.is_a?(::String) ? return_type =~ /\[\]/ : return_type.array) ? "[]" : '' if return_type
         scope.return_types[symbol] = "#{rt}#{rta}" if scope.is_a?(ClassScope)
-        "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{delegate} #{rt}#{rta} #{symbol}#{generics}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")})"}" +
+        "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{delegate}#{weak? ? " weak " : "" }#{unowned? ? " unowned " : "" }#{rt}#{rta} #{symbol}#{generics}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")}#{params.swarm ? ", ..." : ''})"}" +
         h+(z ? z+ret+y : '')
       end
 
@@ -3193,9 +3223,9 @@ Q.line = node.line
         when "ref"
           what.parented self if what.is_a?(VarRef)
           "#{to.build_str} #{what.build_str}"
-      
+        
         else
-          "(#{to.build_str})#{what.build_str}"
+          "(#{to.build_str})#{what.build_str}"  
         end
       end
     end    
@@ -3772,15 +3802,17 @@ Q.line = node.line
               @type = t.variable.symbol
             end
           else
-     
             @type = :infered
+            
+            @type = :'GLib.Type' if t.build_str =~ /^typeof\(.*\)$/
             #STDOUT.puts t
             @type = t.build_str if t.is_a?(Q::ValaSourceGenerator::VCall) rescue :infered
             qqq=t.build_str  if t.is_a?(Q::ValaSourceGenerator::Call)
             
             @type = t.build_str if t.is_a?(Q::ValaSourceGenerator::Call) and t.is_type? rescue :infered #and qqq=~/^[]/ rescue :infered
+            @type = t.what.name.build_str+" "+t.target.build_str if t.is_a?(Q::ValaSourceGenerator::Call) and !is_type?(t) and t.what.name =~ /unowned|weak/
             @type = t.to_sym if t.respond_to?(:to_sym) and t.to_sym != :infered
-
+            @type = @t.build_str.to_sym if is_type?(@t)
             if t.is_a?(Cast) 
               t.build_str =~ /\((.*?)\)/
               @type=$1
@@ -3788,8 +3820,10 @@ Q.line = node.line
                 what.build_str ident
               end if t.what.is_a?(Q::ValaSourceGenerator::Proc)
             end
+            #STDOUT.puts @t.build_str
           end
         else
+          
           @type = :infered
 
           @type = t.to_sym if t.respond_to?(:to_sym) and t.to_sym != :infered
@@ -3852,8 +3886,11 @@ Q.line = node.line
                  end
                end
              end if p
+             begin
+               b = true if @t.node.inspect =~ /event\=\:symbol/
+             rescue; end
         (" "*ident) + "#{out? ? "out " : "#{ref? ? "ref " : "#{ owned? ? "owned " : "#{unowned? ? "unowned " : ""}"}"}"}#{type}#{array ? "[]" : ""} #{name}"+
-        (default ? " = "+@t.build_str : "")
+        ((default and !@t.is_a?(Type) and !@t.node.subast.flatten.index(:symbol) and !b) ? " = "+@t.build_str : "")
       end
     end
     
@@ -3886,7 +3923,7 @@ Q.line = node.line
     class Params < Base
       handles Q::Ast::Params
       
-      attr_reader :typed, :untyped
+      attr_reader :typed, :untyped, :swarm
       def initialize n,t
         super n,t
 
@@ -3909,7 +3946,9 @@ Q.line = node.line
         
         @untyped = node.ordered.map do |n,t| 
           Parameter.new(n.name, nil)
-        end        
+        end  
+        
+        @swarm = node.swarm      
       end
       
       def parented *o

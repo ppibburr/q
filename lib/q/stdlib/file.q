@@ -49,7 +49,7 @@ namespace module Q
 
     macro; def write(path, data)
       exe = Q::File.executable?(path)
-      GLib::FileUtils.set_contents(path,data,-1)
+      GLib::FileUtils.set_contents(path,data,data.length+1)
       Q::File.chmod(path, Q::FILE_MODE_EXE) if exe
     end
     
