@@ -74,10 +74,19 @@ namespace module Q
           next false
         end
         
+        c = Gdk::RGBA()
+        c.parse(Settings.default().terminal_background)
+        terminal.set_color_background(c)
+        Settings.default().notify['terminal-background'].connect() do
+          c.parse(Settings.default().terminal_background)
+          terminal.set_color_background(c)
+        end
+        
         key_press_event.connect() do |event|
+        puts event.key.keyval
           if ((event.key.state & Gtk.accelerator_get_default_mod_mask()) == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))          
-            if event.key.keyval == 81
-              save_all()
+            if event.key.keyval == Gdk::Key::Q
+              close_all()
               next true
             end        
           end
@@ -87,7 +96,7 @@ namespace module Q
               prompt_open()
               next true
             end
-            
+
             if event.key.keyval == Gdk::Key::n
               add_view()
               
@@ -110,7 +119,7 @@ namespace module Q
 
         book.switch_page.connect() do
           GLib::Idle.add() do
-            view_changed()
+            view_changed() if book.length > 0
             next false
           end
         end
@@ -295,8 +304,11 @@ namespace module Q
       end
       
       def close_all()
-        each_view() do |v|
-          close_view(v)
+        (book.length-1).times do |i|
+          GLib::Idle.add() do
+            close_view(current)
+            next false
+          end
         end
       end
       

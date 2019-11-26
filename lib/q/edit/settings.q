@@ -61,10 +61,13 @@ namespace module Q
       property scheme:string do 
         get do return @_scheme; end;
         set do v = :Value; v = value; @_scheme = value; update("scheme", v); end;
-      end      
+      end    
+      
+      attr_accessor terminal_background:string  
       
       def init_view(e:EditView)
         for p in (:ObjectClass.typeof(:Settings).class_ref()).list_properties()
+          if p.name != "terminal-background"
           v = :Value
           if p.value_type == typeof(:string)
             v = ""
@@ -79,10 +82,15 @@ namespace module Q
             get_property(p.name, :ref.v)
             e.set_property(p.name, v)
           end
+          end
         end
       end
       
       signal;def update(p:string, v:Value); end
+
+      def self.new()
+        @terminal_background="#2E3436"
+      end
       
       @@__default = :Settings
       def self.default() :Settings
@@ -169,7 +177,11 @@ namespace module Q
         opts.add("scheme", "set color scheme", typeof(:string)).on.connect() do |s|
           Settings.default().scheme = :string > s if !active
           app.editor.current.scheme = :string > s if active
-        end  
+        end 
+        
+        opts.add("terminal-background", "set terminal background color", typeof(:string)).on.connect() do |s|
+          Settings.default().terminal_background = :string > s
+        end          
         
         opts.add("load-settings", "Load settings from json FILE", typeof(:Q::File)).on.connect() do |v|
           Settings.default().apply_from_json(Q.read(Q.expand_path(:string > v,cl.get_cwd())))

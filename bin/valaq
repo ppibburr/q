@@ -92,6 +92,8 @@ h=opts
     options[:remove] = false
   end  
   
+ 
+  
   opts.on("--[no-]compile", "compiles") do |v|
     options[:compile] = v
   end  
@@ -108,12 +110,19 @@ h=opts
     options[:exec] = true
   end
 
-  opts.on("-e", "--exec=CODE", "execute after compiling") do |v|
-    options[:exec] = true
+  opts.on("-e", "--exec=CODE", "inline code execution") do |v|
+    options[:exec] = true unless options[:p]
     options[:inline] = true
     $V_ARGV.unshift tf="./.e.q"
     File.open(tf,"w") do |to| to.puts v end
   end   
+  
+  opts.on("-p", "prints out transpilation, may preceed '-e'") do
+    options[:p] = true
+    options[:transpile] = true
+    options[:compile] = false
+    options[:remove] = true
+  end     
   
   opts.on( "--version", "show the version") do
     options[:version] = true
@@ -201,7 +210,7 @@ def perform f, reqs=[]
   $performed << f
   
   reqs << f unless reqs.index f
-  STDOUT.puts "\e[34mTranspile: #{f} ...\e[0m"
+  STDERR.puts "\e[34mTranspile: #{f} ...\e[0m"
   
   code = open(f).read
   
@@ -272,7 +281,10 @@ pkgs = $V_ARGV.join(" ").scan(/\-\-pkg (.*? |.*)/).flatten.each do |pk|
   defs << "-D Q_PKG_" << pk.gsub(/\.|\-/,'_').upcase
 end
 cmd="valac #{defs} -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{(options[:gir] || options[:plugin]) ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
-
+cmd = "" if options[:p]
+_in = vala_file(ARGV.last)
+_in = vala_file("#{Dir.getwd}/.e.q") if options[:inline]
+STDOUT.puts open(_in).read if options[:p]
 if options[:compile]
   STDOUT.puts "\e[1m\e[35m"+cmd+"\e[0m"
   exit(1) unless system(cmd)

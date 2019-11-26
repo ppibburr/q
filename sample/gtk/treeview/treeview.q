@@ -15,7 +15,7 @@ class TreeViewSample < Window
     # color attribute. For more info on how TreeView works take a
     # look at the GTK+ API.
      
-    listmodel = ListStore.new(4, :string, :string, :string, :string);
+    listmodel = Gtk::ListStore.new(4, typeof(:string), typeof(:string), typeof(:string), typeof(:string));
     view.set_model(listmodel);
 
     view.insert_column_with_attributes(-1, "Account Name", CellRendererText.new(), "text", 0);

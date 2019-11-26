@@ -1,7 +1,7 @@
 using Gtk
 
 class ListSample < Window 
-  @list_store = :ListStore
+  @list_store = :Gtk::ListStore
   @tree_view  = :TreeView
 
   enum module Columns
@@ -16,7 +16,7 @@ class ListSample < Window
       
     set_size_request(200, 200);
 
-    list_store = ListStore.new(Columns::N_COLUMNS, :bool, :string);
+    list_store = Gtk::ListStore.new(Columns::N_COLUMNS, typeof(:bool), typeof(:string));
     tree_view  = TreeView.new_with_model(list_store);
     toggle = CellRendererToggle.new();
     

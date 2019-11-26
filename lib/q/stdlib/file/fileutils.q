@@ -1,8 +1,10 @@
-`#if Q_FILE`
 require "Q/stdlib/file"
-
+Q.adddef Q_FILE
+`#if Q_FILE`
 namespace module Q
   class File  
+    delegate; def open_cb(f: :Q::File?); end
+  
     attr_reader path_name:string    
      
     def self.new(path: :string?, mode: :Q::FileIOMode?, cb: :open_cb?)

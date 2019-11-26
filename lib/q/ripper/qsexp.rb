@@ -34,7 +34,7 @@ module Q
     if q.last[2]=~/__END__/
       lines = src.split("\n")
       s=q.last[0][0]+1
-      d = lines[s..-1].join.gsub('"','\"')
+      d = lines[s..-1].join("\n").gsub('"','\"')
     end
     DATA[filename] = d
     QSexpBuilder.new(src, filename, lineno).parse

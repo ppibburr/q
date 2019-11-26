@@ -34,6 +34,11 @@ namespace module Q
           opts.add("user-agent", "set the ua string", typeof(:string)).on.connect() do |v|
             Settings.get_default().web_settings.user_agent = :string > v
           end
+          
+          opts.add("allow-views-open-new", "Allow a view to create another view (default is off)", typeof(:bool)).on.connect() do |v|
+            puts :bool > v
+            Settings.get_default().allow_views_open = :bool > v
+          end          
         end
         
         open_files.connect() do |fa|

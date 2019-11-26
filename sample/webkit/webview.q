@@ -8,7 +8,11 @@ def main(a: :string?[])
 
   v = WebKit::WebView.new()
   v.load_uri(u)
-  
+  v.load_changed.connect() do |e|
+    if e == WebKit::LoadEvent::COMMITTED
+      v.run_javascript('plugin_init();', nil)
+    end
+  end  
   w = Gtk::Window.new()
   w.add(v)
   

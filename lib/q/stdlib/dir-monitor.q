@@ -1,8 +1,7 @@
 Q::package(:"gio-2.0")
 
 namespace module Q
-  namespace module File
-    class Monitor
+    class DirMonitor
       @file    = :GLib::File
       @monitor = :GLib::FileMonitor
 
@@ -13,7 +12,7 @@ namespace module Q
       @deleted_cb = :event_cb
        
       def self.new(pth:string, cb: :monitor_cb?)
-        @file = `GLib.File.new_for_path(pth)`
+        @file = GLib::File.new_for_path!(pth)
         @monitor = @file.monitor_directory(0)
 
         puts "Monitoring #{pth}..."
@@ -27,15 +26,14 @@ namespace module Q
         end
       end
 
-      def created(cb:event_cb) :Monitor
+      def created(cb:event_cb) :DirMonitor
         @created_cb = cb
         return self
       end
 
-      def deleted(cb:event_cb) :Monitor
+      def deleted(cb:event_cb) :DirMonitor
         @deleted_cb = cb
         return self
       end
     end
-  end
 end

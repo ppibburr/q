@@ -15,19 +15,17 @@ namespace module Q
     CHANGE
     DELETE
   end    
-  
-  delegate; def open_cb(f: :Q::File?); end   
-  
+
+     
   module File
     include Q::Macros
   
-    
     macro; def chmod(f, m);   GLib::FileUtils.chmod(f, m);  end
     macro; def delete(f);     GLib::FileUtils.remove(f);    end
     macro; def rename(o, n);  GLib::FileUtils.rename(o, n); end
     macro; def symlink(a, b); GLib::FileUtils.symlink(a,b); end
     macro; def directory(f);  GLib::FileUtils.test(f, GLib::FileTest::IS_DIR); end
-    macro; def exist(f);      GLib::FileUtils.test(f, GLib::FileTest::EXISTS); end
+    macro; def exist(f);      GLib::FileUtils.test(Q.expand_path(f), GLib::FileTest::EXISTS); end
     macro; def executable(f); GLib::FileUtils.test(f, GLib::FileTest::IS_EXECUTABLE); end
     macro; def is_symlink(f); GLib::FileUtils.test(f, GLib::FileTest::IS_SYMLINK); end
     macro; def touch(f);      Q.write(f, ""); end
@@ -49,7 +47,7 @@ namespace module Q
 
     macro; def write(path, data)
       exe = Q::File.executable?(path)
-      GLib::FileUtils.set_contents(path,data,data.length+1)
+      GLib::FileUtils.set_contents(path,data,-1)
       Q::File.chmod(path, Q::FILE_MODE_EXE) if exe
     end
     
@@ -72,12 +70,22 @@ namespace module Q
   
   def self.read(f:string) :string?
     s = :string?
-    s = Q::File.read(f)
+    begin  
+      s = Q::File.read(f)
+    
+    rescue FileError => e
+      return nil
+    end
     return s
   end
   
-  def self.write(f:string, s:string)
-    Q::File.write(f,s)
+  def self.write(f:string, s:string) :bool
+    begin
+      Q::File.write(f,s)
+      return true
+    rescue FileError => e
+      return false
+    end
   end
   
   def expand_path(f:string, cwd: :string?) :string
@@ -108,9 +116,13 @@ namespace module Q
     
     return string.joinv("/", o[0..i+1])
   end
+  `#if Q_FILE`
+  def open(pth:string, m: :Q::FileIOMode?, cb: :Q::File::open_cb) :Q::File
+    return Q::File.open(pth,m,cb)
+  end
+  `#endif`
 end
 
 Q.reqifdef  Q_PKG_GIO_2_0, "Q/stdlib/file/gio"
 Q.reqifndef Q_PKG_GIO_2_0, "Q/stdlib/file/fileutils"
-
 

@@ -1,6 +1,6 @@
 `extern void exit(int exit_code);`
 
-Q.adddefif Q_STD, Q_HASH, Q_ENV, Q_FILE, Q_FILE_INFO, Q_MAIN
+Q.adddefif Q_STD, Q_HASH, Q_ENV, Q_FILE, Q_FILE_INFO, Q_MAIN, Q_DIR
 
 namespace module Q
   macro :send, '%v1_Q__send.%v2_Q__send'
@@ -12,46 +12,6 @@ namespace module Q
 
   macro; def cc_time()
     Q::eval(:'string', 'Time::now.to_s')
-  end
-
-  delegate; def read_dir_cb(f:string); end
-  module Dir
-    include Q::Macros
-
-    macro; def read(d, cb)
-      dir = GLib::Dir.open(d, 0);
-      files = :string[]
-      `#{files} = {};`
-
-      c = :Q::read_dir_cb
-      `#{c} = #{cb}`
-
-      name = dir.read_name()
-      while name
-        files << name
-        c(name) if $M > 1
-        name = dir.read_name()        
-      end
-      return files
-    end
-
-    macro; def cwd()
-      GLib::Environment.get_current_dir()
-    end
-
-    macro; def mkdir(path)
-      GLib::DirUtils.create(path, 755)
-    end
-
-    macro; def mkdir_p(path)
-      GLib::DirUtils.create_with_parents(path, 755)
-    end  
-    
-    macro; def glob(path)
-      glob = Posix.Glob()
-      glob.glob(path,0,nil)
-      return glob.pathv
-    end  
   end
   
   macro; def cwd()
@@ -139,11 +99,14 @@ namespace module Q
   macro; def type(v,t)
     `#{v} is #{t}`
   end
+
 end
 
 Q.reqifdef Q_HASH, "Q/stdlib/hash"
 Q.reqifdef Q_ENV,  "Q/stdlib/env"
 
 Q.reqifdef Q_FILE,  "Q/stdlib/file"
+Q.reqifdef Q_DIR,  "Q/stdlib/dir"
 Q.reqifdef Q_MAIN, "Q/main.q"
+
 

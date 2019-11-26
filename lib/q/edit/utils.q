@@ -14,7 +14,9 @@ namespace module Q
           end
         end
         
-        files.each do |f| editor.open_file(f) end 
+        files.each do |f| 
+          editor.open_file(f) if f!=nil && f!=""
+        end 
       end
 
       def self.clear(editor:Editor)

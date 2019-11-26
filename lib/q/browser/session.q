@@ -8,6 +8,7 @@ namespace module Q
         doc = Document.new(Settings.get_default())
         doc.load_uri(Browser.omni(u))
         append(doc)
+        doc.show()
         
         doc.notify['title'].connect() do 
           get_tab(doc).label = doc.title
@@ -33,18 +34,28 @@ namespace module Q
           open()
         end
         
+        removed.connect() do |v|
+          v.destroy()
+        end
+        
         added.connect() do |d|  
           d.notify["title"].connect() do
             get_tab(d).label = d.title
           end
+          d.notify["favicon"].connect() do
+            surface = :'Cairo.ImageSurface?' > d.get_favicon()
+             if surface != nil
+               get_tab(d).icon = Gdk.pixbuf_get_from_surface(surface,0,0,surface.get_width(),surface.get_height())
+             end
+          end
               
-          d.create.connect() do 
-            n = Document.new(Settings.get_default())
-            append(n)
-            return n
+          d.create.connect() do
+            return create_document(d)
           end
         end
       end
+      
+      signal; def create_document(d:Document) :Document?;end
     end
   end
 end  

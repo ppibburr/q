@@ -62,6 +62,7 @@ module Q
         Q::COMMENTS[l] = self
       end
     end
+    
 
     class Event < Node
       attr_accessor :event
@@ -182,12 +183,26 @@ module Q
         @value = subast.shift
       end
     end
+
+    class QHash < Event
+      include HasArguments
+      register do :hash end
+      
+    end
+
+    class AssocListFromArgs < Event
+      include HasArguments
+      register do :assoclist_from_args end
+      def subast; super[0]; end
+    end
     
     class BareAssocHash < Event
       include HasArguments
       register do :bare_assoc_hash end
       def subast
-        super[0]
+        a=super
+      
+        a[0]
       end
     end    
     
@@ -492,6 +507,7 @@ module Q
         @value = o[0]
         super event, line
         @type = event.to_s.gsub("@",'').to_sym
+        @type = :double if @type == :float
         #if @value =~ /^\-[0-9]/ and @value !~ /\./
         #  @type = :int
         #end
@@ -526,6 +542,8 @@ module Q
         :massign
       end
     end
+
+
 
 
     class Program < Event
@@ -994,7 +1012,7 @@ module Q
     end 
     
     def Q.parse_error event, line, e=nil
-      puts EVENT: event
+      STDOUT.puts EVENT: event
       puts e
       puts e.backtrace.reverse.join("\n") if e
       puts "\n\n" 

@@ -4,10 +4,12 @@ require "Q/stdlib/file"
 
 namespace module Q
   class File       
+    delegate; def open_cb(f: :Q::File?); end
+    
     attr_reader gfile: :GLib::File       
   
     def self.get_etag_for_path(path:string) :string
-      return "%s".printf(`GLib.File.new_for_path(path).query_info("*",FileQueryInfoFlags.NOFOLLOW_SYMLINKS,null).get_etag()`)
+      return "%s".printf(GLib::File.new_for_path!(path).query_info("*",FileQueryInfoFlags::NOFOLLOW_SYMLINKS,nil).get_etag())
     end
     
     def self.is_modified(path:string, etag: :string) :bool
@@ -24,7 +26,7 @@ namespace module Q
 
     def self.new(path: :string?, mode: :Q::FileIOMode?, cb: :open_cb?)
       @_path_name  = path
-      @_gfile      = `GLib.File.new_for_path(path)` if path != nil 
+      @_gfile      = GLib::File.new_for_path!(path) if path != nil 
       
       refresh()
       
@@ -126,10 +128,6 @@ namespace module Q
       return Q.read(path_name)
     end     
     
-    macro :dir_monitor, 'new Q.File.Monitor(%v1_Q__File__monitor, ', 'Q/file/monitor.q'
-    macro :dir_monitor_created, 'new Q.File.Monitor(%v1_Q__File__created).created(', 'Q/file/monitor.q'
-    macro :dir_monitor_deleted, 'new Q.File.Monitor(%v1_Q__File__deleted).deleted(', 'Q/file/monitor.q'
-   
     signal; def deleted(); end
     signal; def modified(mt: :Q::FileModType); end   
     

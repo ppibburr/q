@@ -6,11 +6,17 @@ namespace module Q
     class Tabbed < Gtk::Notebook
       class Tab < Gtk::HBox
         attr_reader label_widget: :Gtk::Label
+        attr_reader icon_widget: :Gtk::Image
         attr_reader close: :'Q.UI.Button'
       
         property label:string do
           get do :owned; return @label_widget.label; end
           set do; @label_widget.label = value; end
+        end
+        
+        property icon: :Gdk::Pixbuf? do
+          get do return @icon_widget.get_pixbuf() end
+          set do @icon_widget.set_from_pixbuf(value) end
         end
       
         def self.new()
@@ -18,6 +24,8 @@ namespace module Q
           @_label_widget.ellipsize = Pango::EllipsizeMode::END
           @_close = Q::UI::Button.new_from_stock(Q::UI::Stock::CLOSE)
           @_close.relief = Gtk::ReliefStyle::NONE
+          @_icon_widget = Gtk::Image.new()
+          pack_start(@icon_widget,false,false,1)
           pack_start(@label_widget, true,true,0)
           pack_start(@close,false,false,0)
           
@@ -38,7 +46,13 @@ namespace module Q
               new_tab()
               
               next true
-            end  
+            end 
+            
+            if event.key.keyval == Gdk::Key::t
+              cycle_tab()
+              
+              next true
+            end   
             
             next false                    
           end
@@ -70,9 +84,20 @@ namespace module Q
       
       def remove(t: :T)
         for i in 0..length-1
-          remove_page(i) if get(i) == t
+          if get(i) == t
+            remove_page(i)
+            removed(t)
+          end
         end
       end
+      
+      def cycle_tab()
+        i = self.page+1
+        i = 0 if i > length-1
+        self.page = i
+      end
+      
+      signal;def removed(v: :T);end
       
       new;def get(i:int) :T
         return :T > get_nth_page(i)

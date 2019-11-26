@@ -39,7 +39,7 @@ namespace module Q
       end
 
       def make_object() :T
-        return `Object.new(@gtype)`
+        return Object @gtype
       end
     end
   end

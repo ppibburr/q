@@ -1,9 +1,19 @@
 #  :Goo[]?
 #
 # 4
+class Class
+def define_method *o,&b;
+super
+end;end
 class NilClass
   def line
     Q.line
+  end
+end
+
+module Q
+  class << self
+    attr_accessor :last_assign
   end
 end
 
@@ -37,6 +47,7 @@ def is_type?(t)
 end
 
 def type_from_exp(s, c, l)
+  return :"GLib.Value" if s =~ /q_gen_value_return/ and !c.is_a?(Q::ValaSourceGenerator::Next)
   if s=~ /^this\.([a-zA-Z0-9]+)\(.*\)$/
     t = c.scope.return_types[$1]
     return t if t
@@ -169,6 +180,36 @@ def type_from_exp(s, c, l)
 end
 
 
+def has_local(q, n)
+  !!q.scope.locals[n]
+end
+
+def local_type(q,n)
+  q.scope.locals[n]
+end
+
+def known_function_acces(q,s)
+  fa = []
+  p=q
+  while p=p.parent
+    fa << p.scope.return_types.keys if p.scope.respond_to?(:return_types)
+  end
+  fa.flatten
+end
+
+def resolves_to_function(q,s)
+  fa = known_function_acces(q,s) 
+  !!fa.index(s)
+end
+
+def do_require pth
+  rr = Q::Require.allocate
+  rr.path = pth
+  rr.ok?
+
+  ::Object.send :perform, rr.path, $reqs
+end
+
 $: << File.dirname(__FILE__)
 require "source_generator"
 
@@ -247,7 +288,7 @@ module Q
       class PropertyScope < BlockScope
       
       end
-  
+
     def handle *o
       res = super
       if !res.is_a?(Modifier) and !res.is_a?(HasModifiers) and !modifiers.empty?
@@ -284,9 +325,9 @@ module Q
         return @scope if @scope
         p = self
         while p and p=p.parent
-            if @scope=p.scope
-              break
-            end
+          if @scope=p.scope
+            break
+          end
         end
         @scope
       end
@@ -539,10 +580,11 @@ Q.line = node.line
       end
       
       def build_str ident = 0
+
 Q.line = node.line
 ""
-
-        "{"+members.map do |m| m.build_str end.join(", ")+"}"
+        return "{"+members.map do |m| m.parented(self);m.build_str end.join(", ")+"}" unless parent.is_a?(ObjectConstruct) or parent.is_a?(JSONStr) or parent.is_a?(QHash) or parent.is_a?(Array)
+        return "["+members.map do |m| m.parented(self);m.build_str end.join(", ")+"]" if parent.is_a?(JSONStr) or parent.is_a?(QHash) or parent.is_a?(Array)
       end
     end
     
@@ -596,16 +638,18 @@ Q.line = node.line
       def build_str ident = 0
 Q.line = node.line
 ""
-
+    
         if kind == :global and symbol.to_s == "~"
-          scope.until_nil do |q|
+          begin;(scope or variable.scope or variable.parent.scope or parent.scope or parent.parent.scope).until_nil do |q|
             if q.is_a?(MethodScope)
               q.mark_has_match_data true
               break
             end
-          end
+          end;rescue;end
          
           return get_indent(ident) + "(((#{get_match_data_variable} != null) && (#{get_match_data_variable}.fetch_all() != null)) ? #{get_match_data_variable}.fetch_all() : _q_local_scope_empty_str_array)"
+        elsif kind == :global and symbol.to_s == "0"
+          return get_indent(ident) + "GLib.Environment.get_prgname()"
         elsif kind == :global and symbol.to_s == "?"
           scope.until_nil do |q|
             if q.is_a?(MethodScope)
@@ -687,14 +731,18 @@ Q.line = node.line
     
     class DelegateParameterDeclaration < Base
       handles Q::Ast::BareAssocHash
-      attr_reader :params
+  
+      attr_reader :assoc, :params
       def initialize *o
         n = []
         for i in 0..o[0].subast.length-1
           n << o[0].subast.shift
         end
-        
         super
+        @assoc = n.map do |p|
+          [compiler.handle(p.label).name, compiler.handle(p.value)]
+        end
+       
         @params = n.map do |p|
           t = compiler.handle(p.value)
 
@@ -705,7 +753,13 @@ Q.line = node.line
       def build_str ident = 0
 Q.line = node.line
 ""
-
+        if parent.parent.parent.parent.is_a?(Singleton)
+          begin
+            if parent.parent.parent.subast[0].subast[0].name.to_s == "Object"
+              return assoc.map do |l,v| "#{l}: #{v.build_str}" end.join(", ")
+            end
+          rescue;end
+        end
         if !parent.parent.parent.parent.parent.parent.is_a?(Delegate) and !parent.parent.parent.parent.parent.is_a?(Signal)
           params.map do |p|
             p.name.to_s + ": " + p.type.to_s
@@ -717,6 +771,8 @@ Q.line = node.line
         end
       end
     end
+
+
 
     
     
@@ -766,8 +822,8 @@ Q.line = node.line
           s=s.gsub(/\%n_args/, args ? args.subast.length.to_s : '0')
 
           if s =~ /\%qva/
-          ma = "\n// Q Macro Value[]\n//\n#{" "*ident}Value[] #{qva="_q#{Macro.next_var_name}_#{symbol}_qmva"}={};\n"+args.subast.map do |qqq|
-            "#{" "*ident}Value #{qv="_q#{Macro.next_var_name}_#{symbol}_qmv"} ="+qqq.build_str+";\n\n"+
+          ma = "\n// Q Macro Value[]\n//\n#{" "*ident}Value?[] #{qva="_q#{Macro.next_var_name}_#{symbol}_qmva"}={};\n"+args.subast.map do |qqq|
+            "#{" "*ident}Value? #{qv="_q#{Macro.next_var_name}_#{symbol}_qmv"} ="+qqq.build_str+";\n\n"+
             "#{" "*ident}#{qva} += #{qv};\n"
           end.join()
             p MA: s=ma+"\n\n"+s
@@ -984,11 +1040,7 @@ Q.line = node.line
         if is_def(q=ast.subast[0].build_str)
         #STDOUT.puts IFDEF: q, LOAD: true
           ast.subast[1..-1].each do |s|
-              rr = Q::Require.allocate
-              rr.path = s.node.value
-              rr.ok?
-
-              ::Object.send :perform, rr.path, $reqs
+              do_require s.node.value
             
           end
         end
@@ -1096,7 +1148,18 @@ Q.line = node.line
         elsif subast[0].symbol.to_sym == :time
           "#{t}new GLib.DateTime.from_unix_local(#{subast[1].build_str})"
         elsif subast[0].symbol.to_sym == :puts
-          "#{t}stdout.puts((#{subast[1].build_str}).to_string()); stdout.putc('\\n');"        
+          v=subast[1].subast[0].build_str
+          "#{t}stdout.puts((#{v}).to_string()); stdout.putc('\\n');"        
+        elsif subast[0].symbol.to_sym == :ref
+          v=subast[1].subast[0].build_str
+          "ref #{v}"      
+        elsif subast[0].symbol.to_sym == :out
+          v=subast[1].subast[0].build_str
+          "out #{v}"  
+        elsif subast[0].symbol.to_sym == :is
+          v=subast[1].subast[0].build_str
+          vv=subast[1].subast[1].build_str
+          "#{v} is #{vv}"               
         elsif subast[0].symbol.to_sym == :require
           mark_newline false
           mark_extra_newline false
@@ -1145,6 +1208,175 @@ Q.line = node.line
         MACROS[subast[0].symbol]
       end
     end
+    
+    class Value <  Base
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :Value
+      end
+      
+      def build_str ident=0
+        (" "*ident)+"GLib.Value #{Q.last_assign} = #{subast[1].build_str};"
+      end
+    end
+
+
+    class ObjectConstruct <  Base
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :Object
+      end
+      
+      def build_str ident=0
+      list = ""
+      list = ", "+subast[1].subast[1].assoc.map do |n,v| v.parented(self);"\"#{n}\", #{v.build_str}" end.join(", ") rescue ""
+      typeof = subast[1].subast[0].build_str
+      cast = typeof =~ /^[A-Z]/ ? "(#{typeof})" : ""
+      typeof = typeof =~ /^[A-Z]/ ? "typeof(#{typeof})" : typeof
+        "#{cast}Object.new(#{typeof}#{list})"
+      end
+    end
+
+    class QHash <  Base
+      handles Q::Ast::QHash
+      def initialize *o
+        super
+
+      end
+      def build_str ident=0
+        subast[0].parented(self)
+        "{#{subast[0].build_str}}"
+      end
+    end
+    
+    class AssocListFromArgs <  Base
+      handles Q::Ast::AssocListFromArgs
+               def initialize *o
+        super
+  
+      end
+
+      def build_str ident=0
+      
+        subast.map do |c| c.parented(self.parent);c.build_str end.join(",")
+      end
+    end
+    
+        
+    class AssocNew <  Base
+      handles Q::Ast::AssocNew
+      
+      def initialize *o
+        super
+        
+      end
+      def build_str ident=0
+        value.parented(self.parent)
+        #subast[0].node.name + ", #{subast[1].build_str}"
+        v = value.build_str
+        p = Parameter.new(name, value)
+        if !value.is_a?(Array) and !value.is_a?(QHash)
+          if p.type.to_s !~ /int|bool|string|null/
+            v = "$(#{v})"
+          elsif p.type.to_s == 'string'
+            v = v.gsub(/^\@/,'')
+          end
+        end
+        "\"#{name}\": #{v}"
+      end
+      
+      def name; node.label.name end
+      def value; 
+        @value ||= compiler.handle(node.value)
+      ;end
+    end
+    
+    class JSONStr <  Base
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :JSON
+      end
+      
+      def build_str ident=0
+      list = subast[1].subast[0].assoc.map do |n,v| v.parented(self);
+        if !v.is_a?(Array) and !v.is_a?(QHash)
+        p = Parameter.new(n, v)
+        v = v.build_str
+          if p.type.to_s !~ /int|bool|string|null/
+            v = "$(#{v})"
+          elsif p.type.to_s == 'string'
+            v = v.gsub(/^\@/,'')
+          end
+        end 
+        "\"#{n}\": #{v.build_str}"
+      end.join(", ")
+        "@\"{#{list.inspect.gsub(/^\"/, '').gsub(/\"$/,'')}}\""
+      end
+    end    
+    
+    class JS < Base
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :JS
+      end
+      
+      def build_str ident=0
+        do_require("Q/jsc") unless @req
+        @req = true
+         c = subast[1].subast[0].build_str
+      funcs=""
+      list = []
+      props = ""
+      subast[1].subast[1].assoc.each do |n,v| v.parented(self);
+      
+        if !v.is_a?(Array) and !v.is_a?(QHash)
+        p = Parameter.new(n, v)
+        v = v.build_str
+        
+          if p.instance_variable_get("@t").subast[0].is_a?(Q::ValaSourceGenerator::Proc)
+            funcs << ".set_func(\"#{n}\", #{v})"
+            next
+          elsif p.type.to_s !~ /int|bool|string|null/
+            t = local_type(self,v)
+            t =  t ? t.type : nil
+            if t and (t.to_s == "JSC.Value")
+              props << ".set_prop(\"#{n}\", #{v})"
+              next
+            end
+            
+            if resolves_to_function(self, "#{v}") and !has_local(self, "#{v}")
+              funcs << ".set_func(\"#{n}\", #{v})"
+              next
+            else
+              v = "$(#{v})"
+            end
+          elsif p.type.to_s == 'string'
+            v = v.gsub(/^\@/,'')
+          end
+        end 
+        
+        list << "\"#{n}\": #{v.build_str}"
+      end
+      list = list.join(", ")
+        "new Q.JSCValue.build(#{c}, @\"_q_bjsc_v = {#{list.inspect.gsub(/^\"/, '').gsub(/\"$/,'')}}; _q_bjsc_v;\")#{funcs}#{props}.value"
+      end
+    end      
+    
+    class JSPlugin < JS
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :JSPlugin
+      end
+      
+      def build_str ident=0
+        super(ident).gsub(/^new Q.JSCValue.build/, "new Q.JSPlugin.build").gsub(/\.value$/,"")
+      end
+    end    
+    
+    class JSPluginClass < JS
+      handles Q::Ast::Command, Command do
+        subast[0].symbol.to_sym == :JSPluginClass
+      end
+      
+      def build_str ident=0
+        super(ident).gsub(/^new Q.JSCValue.build/, "base.build").gsub(/\.value$/,"").split("_q_bjsc_v;\"\).").join("_q_bjsc_v;\"\);\n#{get_indent(ident)}")
+      end
+    end     
     
     class ObjMember < Base
       handles Q::Ast::Field
@@ -1719,7 +1951,8 @@ Q.line = node.line
             s=get_indent(ident) + "(#{@target.build_str})" + "" + what.symbol.to_s
          
           else
-            if is_type? and node.q != :"::"
+         # STDOUT.puts "jjjjj"+node.target.inspect
+            if is_type?() and node.q != :"::" and (!node.target.respond_to?(:of) or !node.target.of.is_a?(Q::Ast::ARef))
               s=get_indent(ident) + "(#{@target.build_str})" + "" + what.symbol.to_s
             else
               s=get_indent(ident) + @target.build_str + "." + what.symbol.to_s
@@ -1753,17 +1986,24 @@ Q.line = node.line
           s=get_indent(ident) + @target.build_str + "." + what.symbol.to_s
           s=s.gsub(/\?$/,'')
         else
-        p cc: what.symbol.to_s
+  
         #  case what.symbol.to_s
       #    when "index"
        #     s = Command::MACROS['Q.Iterable.find'].perform ident, subast
          # else
+            begin
+              if (a=subast[0].subast[0]).is_a?(Assign)
+                s = get_indent(ident) + (t=(@target.build_str + ".").gsub(/^std\./,'')+"#{what.symbol}") + " #{a.variable.symbol} = #{a.value.build_str}" 
+                scope.locals[a.variable.symbol.to_s] = t
+                return s
+              end
+            rescue;end
             s=get_indent(ident) + @target.build_str + "." + what.symbol.to_s
          # end
         end
         s
       end   
-    end
+    end   
     
     class ZSuper < Base
       handles Q::Ast::ZSuper
@@ -1801,8 +2041,8 @@ Q.line = node.line
       handles Q::Ast::ArgsAddBlock
       
       def initialize *o
-        super
-
+        a=super
+        a
       end
       
       def build_str ident = 0
@@ -1913,9 +2153,10 @@ while p and p = p.parent
   break if p.is_a?(HasModifiers)
 end
         variable.instance_variable_set("@is_macro", p) if p and p.macro?
+        scope.locals[variable.symbol].wrote = true if scope.locals[variable.symbol].is_a?(DeclaredType)
+        type = scope.locals[variable.symbol] if scope.locals[variable.symbol].is_a?(DeclaredType)
+        scope.append_lvar(type.name, type) unless scope.locals[variable.symbol]
 
-        scope.append_lvar type.name, type
-        
         if type.infered? and value.build_str !~ /^\((.*)\)[a-zA-Z0-9]/
           qqq = ""
           if (value.is_a?(Command) or value.is_a?(VCall) or value.is_a?(VarRef) or value.is_a?(MethodAddArg)) and m=value.is_macro?
@@ -1933,45 +2174,60 @@ end
           end
 
 
-
+          vv = ""
           if val_str.strip == ""
             vv="var"
             if c=scope.class_scope
             if vt = type_from_exp(qqq.strip, c, scope)
-              vv = vt; scope.locals[variable.symbol] = vt
+              vv = vt; scope.locals[variable.symbol] ||= vt
             end
             end
             "#{vv} #{variable.symbol} = #{qqq}"
 
           else
-            vv="var"
+          
+            vv="var" unless scope.locals[variable.symbol].respond_to?(:wrote) and scope.locals[variable.symbol].wrote
+            scope.locals[variable.symbol].wrote = true
             if c=scope.class_scope
-            if vt = type_from_exp(val_str.strip, c, scope)
-              vv = vt; scope.locals[variable.symbol] = vt
-            end
+              if vt = type_from_exp(val_str.strip, c, scope)
+                vv = vt; scope.locals[variable.symbol] ||= vt
+              end
             end
             
             "#{qqq}#{vv} #{variable.symbol} = #{val_str}"
           end
-        elsif type.infered? and value.build_str =~ /^\((.*)\)[a-zA-Z0-9]+$/
+        elsif type.infered? and value.build_str =~ /^\(([A-Za-z]+).*\)[a-zA-Z0-9]+/
           n=value.node
+          if true#!scope.locals[variable.symbol]
+          scope.locals[variable.symbol] ||= $1
           "#{$1} #{variable.symbol} = #{value.build_str}"
+          else
+            "#{variable.symbol} = #{value.build_str}"
+          end
         elsif scope.member.parent.is_a?(PropertyWithBlock)
           "#{variable.symbol} = new #{type.type}[#{type.array.length}]"
         else
           q = "" + 
           if type.array and type.array.length
              qq=[]
+             
              if type.array.initializer? and type.array.length > 1
                i = -1
                type.array.iter do |v|
                  i+=1;
-                 if type.array.get_type == 'string'
-                   v = "\"#{v}\""
-                 end
-                 if type.array.get_type == 'char'
-                   v = "'#{v}'"
-                 end
+                
+                 #if type.type == "Value"
+                   
+                 v = "#{v}"
+                 
+                 #else
+                 #  if type.array.get_type == 'string'
+                 #    v = "\"#{v}\""
+                 #  end
+                 #  if type.array.get_type == 'char'
+                 #    v = "'#{v}'"
+                 #  end
+                 #end
                  qq << "#{v}" 
                end
           
@@ -1982,6 +2238,7 @@ end
           elsif type.nullable?
             "#{type.build_str} = null"
           else
+
             return "#{type.build_str(0,self)}" if !type.infered?
             "var #{variable.symbol} = #{value.build_str}"
           end
@@ -2011,7 +2268,13 @@ end
       def build_str ident = 0
 Q.line = node.line
 ""
-
+        Q.last_assign = variable.symbol.to_s
+        
+        if value.is_a?(Value)
+          scope.locals[variable.symbol.to_s] = :"GLib.Value"
+          return value.build_str ident 
+        end
+        
         if variable.respond_to?(:kind)
           case variable.kind
           when :instance
@@ -2023,6 +2286,10 @@ Q.line = node.line
             "#{get_indent(ident)}#{scope.is_a?(Q::Compiler::StructScope)? "" : "this."}"+variable.symbol + do_sets_field + " = #{vs}"
           when :local
             if is_declaration?
+              s=nil
+              s=(get_indent(ident) + "#{variable.symbol} = #{value.build_str}") if (scope.locals[variable.symbol] and value.is_a?(ObjectNew)) or (scope.locals[variable.symbol] and value.is_a?(Cast))
+              scope.locals[variable.symbol].wrote = true if scope.locals[variable.symbol].respond_to?(:wrote)
+              return s if s
               get_indent(ident) + declare_field + (value.is_a?(Cast) ? " = "+value.build_str : "")
             else
               get_indent(ident) + assign_local(ident)
@@ -2152,6 +2419,7 @@ Q.line = node.line
         else
           of.parented self
           values.parented self if values
+          
           of.build_str+
           "[#{values.build_str}]"
         end
@@ -2364,6 +2632,8 @@ Q.line = node.line
       
       def value
         of.get_type
+      rescue
+        of.build_str+"["+compiler.handle(node.values.subast[0]).build_str+"]"
       end
       
       def get_type
@@ -2371,7 +2641,7 @@ Q.line = node.line
       end
 
       def iter &b
-        node.values.subast.map do |n| compiler.handle(n).node.value end.each do |q| b.call q end
+        node.values.subast.map do |n| compiler.handle(n).build_str end.each do |q| b.call q end
       end
 
       def initializer?
@@ -2558,7 +2828,7 @@ Q.line = node.line
         node.value.to_s + 
         case get_type
         when :float
-          "f"
+          ""
         else
           ""
         end
@@ -2597,11 +2867,25 @@ Q.line = node.line
     
     class Return < Base
       handles Q::Ast::Return
+      def parented *o
+        super
+        if !is_a?(Next) and subast[0].subast[0].is_a? Value
+          scope.locals["q_gen_value_return"] = :"GLib.Value"
+        end
+      end
       def build_str ident = 0
 Q.line = node.line
 ""
-
-        return get_indent(ident) + "return (#{subast[0].build_str()})" if subast[0].build_str() != ""
+n = "return"
+n = "next" if self.is_a?(Next)
+        if !is_a?(Next) and subast[0].subast[0].is_a? Value
+          scope.locals["q_gen_value_#{n}"] = :"GLib.Value"
+        end
+        if subast[0].subast[0].is_a? Value
+          Q.last_assign = "q_gen_value_#{n}"
+          return get_indent(ident) + "#{subast[0].build_str};\n" + get_indent(ident) + "return (q_gen_value_#{n})"
+        end
+        return get_indent(ident) + "return (#{subast[0].build_str()})".gsub("[]",'') if subast[0].build_str() != ""
         return get_indent(ident) + "return"
       end
     end
@@ -2636,7 +2920,7 @@ Q.line = node.line
 Q.line = node.line
 ""
 
-        subast[0].build_str ident
+        subast[0].build_str(ident)
       end      
     end    
     
@@ -3084,10 +3368,20 @@ Q.line = node.line
 
         rt = '' if symbol == :construct
 
+        braces = h+(z ? z+ret+y : '')
+
+        if signal != ""
+          kind=""
+          if z.strip == ""
+            braces = ";"
+          end
+        end
+
         rta = (return_type.is_a?(::String) ? return_type =~ /\[\]/ : return_type.array) ? "[]" : '' if return_type
-        scope.return_types[symbol] = "#{rt}#{rta}" if scope.is_a?(ClassScope)
+        scope.return_types[symbol] = "#{rt}#{rta}" #if scope.is_a?(ClassScope)
         "#{get_indent(ident)}#{target} #{visibility} #{async}#{kind} #{signal} #{delegate}#{weak? ? " weak " : "" }#{unowned? ? " unowned " : "" }#{rt}#{rta} #{symbol}#{generics}#{symbol == :construct ? "" :"(#{plist.reverse.join(", ")}#{params.swarm ? ", ..." : ''})"}" +
-        h+(z ? z+ret+y : '')
+        
+        braces
       end
 
       def set_generics generics
@@ -3320,7 +3614,7 @@ Q.line = node.line
           
           sig = "#{visibility} #{scope.member.name.to_s.gsub(/\<.*?\>/,'')}#{q} (#{plist.reverse.join(", ")}) {\n"
         end
-        
+        scope.return_types[symbol] = "#{rt}#{rta}"
         get_indent(ident) + 
         sig +
         bs +
@@ -3333,7 +3627,13 @@ Q.line = node.line
       def build_str ident = 0
 Q.line = node.line
 ""
+
+
+begin
         args = subast[0].subast[1].subast[0] ? subast[0].subast[1].subast[0].subast.length : 0
+        rescue
+          args = subast[0].params.untyped.length
+        end
         get_indent(ident) + subast[0].build_str().gsub(/\)$/, args == 0 ? "" : ", ") + 
         subast[1].build_str(ident) +
         ")"
@@ -3517,11 +3817,15 @@ Q.line = node.line
 
       method = ""
       
-      if subast[0].what.symbol.to_sym != :new
+      if subast[0].what.symbol.to_sym != :new and subast[0].what.symbol.to_s !~ /\!$/
         method = "." +
         "#{subast[0].what.symbol}".gsub(/^new\_/,'')
+      elsif subast[0].what.symbol.to_s =~ /\!$/
+        method = "." +
+        "#{subast[0].what.symbol}".gsub(/\!$/,'')
       end
-        "new #{subast[0].target.build_str.gsub("[", '<').gsub("]", '>')}#{method}(#{subast[1].build_str})"
+        n="new " if subast[0].what.symbol.to_s !~ /\!$/
+        "#{n}#{subast[0].target.build_str.gsub("[", '<').gsub("]", '>')}#{method}(#{subast[1].build_str})"
       end
     end    
 
@@ -3865,9 +4169,11 @@ Q.line = node.line
     
     class DeclaredType < ResolvedType
       attr_reader :name, :type, :array, :default
+      attr_accessor :wrote
       def initialize n, t, a=nil, default: false
         @name = n
         @default = default
+        @wrote = false
         super @t=t,a
       end
       
@@ -4185,6 +4491,8 @@ Q.line = node.line
 
         "#{i=(" "*ident)}if (#{subast[0].build_str(0)}) {\n"+
         subast[1..-1].map do |c|
+          c.parented(self)
+
           c.build_str(ident+2)+";"
         end.join("\n")+
         "\n#{i}}"

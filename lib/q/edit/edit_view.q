@@ -80,6 +80,8 @@ namespace module Q
       end
 
       def connect_keys()
+        change_number.connect() do puts "WHY" end
+      
         key_press_event.connect() do |event|
           if ((event.key.state & Gtk.accelerator_get_default_mod_mask()) == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))
             if event.key.keyval == Gdk::Key::S
@@ -141,8 +143,8 @@ namespace module Q
       end
 
       def get_selected(replace_new_line = true) :string
-        start, e = :Gtk::TextIter
-        
+        start = :Gtk::TextIter
+        e = :Gtk::TextIter
         buffer.get_selection_bounds(:out.start, :out.e)
         selected = buffer.get_text(start, e, true)
       
@@ -187,7 +189,8 @@ namespace module Q
       end
       
       def replace(q:string, w:string)
-        start_iter, end_iter   = :Gtk::TextIter?
+        end_iter, start_iter = :Gtk::TextIter?
+
        
         buffer.get_iter_at_offset(:out.start_iter, buffer.cursor_position);
         search.settings.search_text = q
@@ -233,7 +236,10 @@ namespace module Q
         end
       end
 
-      def load_file(path:string)          
+      def load_file(path:string)        
+        return if path==""
+        return if path == nil
+        
         set_file_path(path)
 
 		    buffer.set_modified(false);	
@@ -306,6 +312,8 @@ namespace module Q
       end   
       
       def set_lang()
+        puts path_name
+        return if path_name==nil
         l    = Gtk::SourceLanguageManager.new();
 		    lang = l.guess_language(@path_name, nil);
 		    
@@ -468,4 +476,3 @@ namespace module Q
     end  
   end
 end
- 

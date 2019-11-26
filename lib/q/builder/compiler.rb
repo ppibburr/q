@@ -97,7 +97,11 @@ module Q
     end
 
     class ProgramScope < Scope
-
+       attr_accessor :return_types
+       def initialize *o
+         super
+         @return_types = {}
+       end
     end
 
     class ClassScope < StopLScope
@@ -123,7 +127,8 @@ module Q
         if @node.subast
           @subast = @node.subast.map do |a|
           if a.is_a?(Array)
-           p a;exit
+           STDOUT.puts a[0].inspect
+           a=a[0]
           end
             a.scope = get_childrens_scope
             compiler.handle(a)

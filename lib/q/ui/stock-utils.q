@@ -25,9 +25,10 @@ namespace module Q; namespace module UI
   end
 
   class Button < Gtk::Button
-    def self.new_from_stock(item:string)
+    def self.new_from_stock(item:string, relief: :Gtk::ReliefStyle?)
       Object()
       self.image = Gtk::Image.new_from_icon_name(item, Gtk::IconSize::BUTTON)
+      self.relief = relief if relief != nil
     end
   end
 end;end

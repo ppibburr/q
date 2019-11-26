@@ -19,6 +19,9 @@ namespace module Q
         unless u =~ /\./
           u = "google.com/search?q=#{string.joinv("+", url.split(" "))}"
         end
+        
+        u = "google.com/search?q=#{string.joinv("+", url.split(" "))}" if u =~ / /
+       
         u = "#{Browser::DEFAULT_PROTOCOL}://#{u}";
       end
       

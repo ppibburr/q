@@ -8,7 +8,19 @@ namespace module JSONSample
   def self.main()
     begin
       parser = Json::Parser.new()
-      parser.load_from_data(DATA, -1)
+      v = 3.33
+      data = JSON response: {data: [{
+                                     string: "foo",
+                                     double: v
+                                   },{
+                                     string: "bar",
+                                     double: 1.11
+                                   },{
+                                     string: "quux",
+                                     double: 7.77
+                                   }]}
+                                   
+      parser.load_from_data(data, -1)
 
       root_object = parser.get_root().get_object()
       response    = root_object.get_object_member("response")
@@ -26,20 +38,3 @@ namespace module JSONSample
     end
   end
 end
-
-__END__
-
-{
-  "response" : {
-    "data" : [{
-      "string": "foo",
-      "double": 3.33
-    },{
-      "string": "bar",
-      "double": 1.11
-    },{
-      "string": "quux",
-      "double": 7.77
-    }]
-  }
-}

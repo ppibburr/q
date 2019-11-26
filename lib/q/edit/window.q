@@ -12,7 +12,7 @@ namespace module Q
       def self.new(app: :Q::Edit::Application)
         Object(application:app) 
 
-        @icon = Gtk::IconTheme.get_default().load_icon(Gtk::STOCK_EDIT, 24, 0)
+        @icon = Gtk::IconTheme.get_default().load_icon("edit", 24, 0)
 
         @editor = Editor.new()
 
@@ -33,7 +33,7 @@ namespace module Q
       def create_toolbar()
         @toolbar     = Gtk::Toolbar.new()
         
-        toolbar.get_style_context().add_class(Gtk.STYLE_CLASS_PRIMARY_TOOLBAR);
+        toolbar.get_style_context().add_class(Gtk::STYLE_CLASS_PRIMARY_TOOLBAR);
 
 		    new_button = Q::UI::ToolButton.new_from_stock(Q::UI::Stock::NEW);
 		    toolbar.add(new_button);
@@ -148,8 +148,10 @@ namespace module Q
 
       def connect_events()
         editor.view_changed.connect() do
-          path = editor.file
-          self.title = "QEdit - #{path != nil ? path : ""}"
+          if editor.book.length > 0
+            path = editor.file
+            self.title = "QEdit - #{path != nil ? path : ""}" 
+          end
         end
 
         editor.show_find.connect() do
@@ -174,8 +176,14 @@ namespace module Q
               application.quit()
               next true
             end
+     
+
+            if event.key.keyval == Gdk::Key::n
+              # No idea why Editor cant connect his key
+              editor.add_view()
+              next true
+            end  
           end
-          
           next false
         end 
       end
