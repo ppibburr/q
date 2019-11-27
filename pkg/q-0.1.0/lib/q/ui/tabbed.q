@@ -16,10 +16,7 @@ namespace module Q
         
         property icon: :Gdk::Pixbuf? do
           get do return @icon_widget.get_pixbuf() end
-          set do 
-            pixbuf = value.scale_simple(24,24, Gdk::InterpType::BILINEAR)
-            @icon_widget.set_from_pixbuf(pixbuf) 
-          end
+          set do @icon_widget.set_from_pixbuf(value) end
         end
       
         def self.new()
