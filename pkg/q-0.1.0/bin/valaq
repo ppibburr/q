@@ -1,0 +1,371 @@
+#!/usr/bin/env ruby
+$V = ARGV.delete("-P")
+def p *o
+  super if $V
+  o[0]
+end
+#
+def puts *o
+  super if $V
+  o[0]
+end
+
+
+class String
+  def type; self; end; def q; self end; def build_str ident=0; self; end
+end
+
+od = Dir.getwd
+Dir.chdir File.dirname(__FILE__)+"/../"
+require './lib/q'
+require "./lib/q/builder/compilers/vala.rb"
+Dir.chdir od
+class << Q
+  def line= l
+    @ol = @line if @line
+    @line = l if l
+  end
+  
+  def line
+    @line || @ol
+  end
+end
+
+Q::Ast.compiler_type = Q::ValaSourceGenerator
+
+require 'optparse'
+
+$V_ARGV = secondary_arguments = []
+options = {:valac=>'valac', :verbose => false, :compile => true}
+h=nil
+optparse = OptionParser.new do |opts|
+h=opts
+  opts.banner = "Q Compiler\n\nUsage: valaq file [options] [-- [valac_options]]"
+  opts.separator ""
+  opts.on("-v", "--[no-]verbose", "Run verbosely") do |v|
+    options[:verbose] = v
+  end
+  
+  opts.on("--valac-command [COMMAND]") do |v|
+    options[:valac_command] = v
+  end
+  
+  opts.on("--plugin FILE", "Generate a shared-lib *.so file") do |v|
+    options[:plugin] = v
+  end  
+  
+  opts.on("--introspection NAMESPACE-VERSION", "generate a gir: <NAMESPACE>-<VERSION>.gir") do |v|
+    options[:gir] = v
+  end
+  
+  opts.on("--install-gir", "installs data generated in the ./q-gir directory") do
+    options[:install_gir] = true
+  end
+  
+  opts.on("--vapi-dir LOCATION", "specify location to install .vapi files. only valid with `--install-gir`") do |v|
+    options[:vapi_dir] = v
+  end  
+  
+  opts.on("--gir-dir LOCATION", "specify location to install .gir files. only valid with `--install-gir`") do |v|
+    options[:gir_dir] = v
+  end  
+  
+  opts.on("--lib-dir LOCATION", "specify location to install .so files. only valid with `--install-gir`") do |v|
+    options[:lib_dir] = v
+  end
+  
+  opts.on("--typelib-dir LOCATION", "specify location to install .typelib files. only valid with `--install-gir`") do |v|
+    options[:typelib_dir] = v
+  end    
+  
+  opts.on("--include-dir LOCATION", "specify location to install .h files. only valid with `--install-gir`") do |v|
+    options[:include_dir] = v
+  end  
+  
+  opts.on("--pconfig-dir LOCATION", "specify location to install .pc files. only valid with `--install-gir`") do |v|
+    options[:pc_dir] = v
+  end            
+
+  opts.on("--[no-]transpile", "transpiles only") do |v|
+    options[:transpile] = v
+    options[:compile] = false
+    options[:remove] = false
+  end  
+  
+ 
+  
+  opts.on("--[no-]compile", "compiles") do |v|
+    options[:compile] = v
+  end  
+  
+  opts.on("--[no-]remove-generated", "Removes generated .vala files") do |v|
+    options[:remove] = v
+  end
+  
+  opts.on("-V", "--valac VALAC", "specify the valac command") do |v|
+    options[:valac] = v
+  end
+  
+  opts.on("-r", "--run", "execute after compiling") do |v|
+    options[:exec] = true
+  end
+
+  opts.on("-e", "--exec=CODE", "inline code execution") do |v|
+    options[:exec] = true unless options[:p]
+    options[:inline] = true
+    $V_ARGV.unshift tf="./.e.q"
+    File.open(tf,"w") do |to| to.puts v end
+  end   
+  
+  opts.on("-p", "prints out transpilation, may preceed '-e'") do
+    options[:p] = true
+    options[:transpile] = true
+    options[:compile] = false
+    options[:remove] = true
+  end     
+  
+  opts.on( "--version", "show the version") do
+    options[:version] = true
+  end 
+  
+  opts.on("-h", "--help", "Displays this summary" ) do
+    STDOUT.puts opts
+    exit(0)
+  end
+  
+  opts.separator ""
+  opts.separator "For valac options run 'valac --help'." 
+  opts.separator ""   
+end
+
+
+arguments = ARGV.dup
+
+
+
+first_run = true
+errors = false
+while errors || first_run
+  errors = false
+  first_run = false
+  begin
+    optparse.order!(arguments) do |unrecognized_option|
+      secondary_arguments.push(unrecognized_option)
+    end
+  rescue OptionParser::InvalidOption => e
+    errors = true
+    e.args.each { |arg| secondary_arguments.push(arg) }
+    arguments.delete(e.args)
+  end
+end
+secondary_arguments.shift if options[:inline];
+primary_arguments = ARGV.dup
+secondary_arguments.each do |cuke_arg|
+  primary_arguments.delete(cuke_arg)
+end
+
+optparse.parse(primary_arguments)
+
+if !options.has_key?(:remove)
+  options[:remove] = true
+end
+
+if options[:verbose]
+  secondary_arguments << "-v"
+end
+
+VALAC_COMMAND = options[:valac_command] || "valac"
+VALA_VERSION  = `#{VALAC_COMMAND} --version`.strip.split(" ")[1].split(".")[0..1].join(".")
+
+BUILD_PATH         = options[:build_dir] || "./q-gir"
+
+BUILD_TYPELIB_PATH = "#{BUILD_PATH}/usr/lib/girepository-1.0/"
+BUILD_GIR_PATH     = "#{BUILD_PATH}/usr/share/gir-1.0/"
+BUILD_LIB_PATH     = "#{BUILD_PATH}/usr/lib/"
+BUILD_INCLUDE_PATH = "#{BUILD_PATH}/usr/include/"
+BUILD_VAPI_PATH    = "#{BUILD_PATH}/usr/share/vala-#{VALA_VERSION}/vapi/"
+BUILD_PC_PATH      = "#{BUILD_PATH}/usr/share/pkgconfig/"
+
+TARGET_TYPELIB_PATH = options[:typelib_dir] || "/usr/lib/girepository-1.0/"
+TARGET_GIR_PATH     = options[:gir_dir]     || "/usr/share/gir-1.0/"
+TARGET_LIB_PATH     = options[:lib_dir]     || "/usr/lib/"
+TARGET_INCLUDE_PATH = options[:include_dir] || "/usr/include/"
+TARGET_VAPI_PATH    = options[:vapi_dir]    || "/usr/share/vala-#{VALA_VERSION}/vapi/"
+TARGET_PC_PATH      = options[:pc_dir]      || "/usr/share/pkgconfig/"
+
+def vala_file f
+  base = File.basename(f)
+  fdir = File.dirname(f)
+  dir  = File.expand_path("./q_generated/#{File.basename($prog).split(".q")[0]}")
+  `mkdir -p #{dir}/#{fdir}`
+  File.join(dir,fdir,"#{base.gsub(/\.q$/,".vala")}")
+end
+
+COMMENTS = {}
+$performed = []
+def perform f, reqs=[]
+  f = File.expand_path(f)
+  return if $performed.index(f)
+
+  $performed << f
+  
+  reqs << f unless reqs.index f
+  STDERR.puts "\e[34mTranspile: #{f} ...\e[0m"
+  
+  code = open(f).read
+  
+  ast = $ast = Q.build(code, f)
+
+  ast.parented nil
+  COMMENTS[f] = Q::COMMENTS.dup;
+  Q::COMMENTS.clear
+  ast.requires.each do |req|
+  #STDOUT.puts REG: req
+    if req.ok?
+    lf = Q.filename
+   
+      perform req.path, reqs
+
+    Q.filename = lf
+    else
+      puts "RequireError: #{req.source} - #{req.line}, no such file: #{req.path}"
+      exit 1
+  end
+  
+  #rescue
+   # puts "Unhandled error: line #{Q.line}] #{open(Q.filename).read[Q.line]}"
+    #exit 1
+  end
+
+  Q::COMMENTS.clear
+  Q::COMMENTS.push *COMMENTS[f]
+  File.open(vala_file(f), "w") do |f| f.puts Q::ValaSourceGenerator.new(ast).compile end
+end
+$prog = f = File.expand_path(secondary_arguments.shift)
+REL_DIR = File.dirname(f)
+begin
+  perform f, $reqs=reqs = []
+rescue => e
+  if true
+    STDOUT.puts "\n"
+    STDOUT.puts e
+    STDOUT.puts e.backtrace.reverse.join("\n")
+  end
+  STDOUT.puts "\n"
+  
+  t = "Unhrandled"
+  la = open(Q.filename).readlines
+  l = la[ln=Q.line-1]
+  if e.backtrace[0] =~ /declare_field/ and l =~ /\=( [A-Z]|[A-Z])/
+    t="FieldDeclarationError"
+    STDOUT.puts "Type declaration must be proceeded with `:`"
+  end
+  (t = "MethodInvocationError") and STDOUT.puts("methods invocation not to proceed with space ` (`") if (l =~ /\.[a-zA-Z0-9]+ \(/)
+  (t = "MethodInvocationError") and STDOUT.puts("methods must be invoked with `()`") if (l=~ /[a-z0-9] do( |\n)/) or l.strip == "end"
+  puts "..."
+  STDOUT.puts "<#{t}> \e[31merror\e[0m: #{f} line #{Q.line}] #{l}"
+  exit 1
+end
+
+if options[:gir]
+  secondary_arguments.insert(0, "--gir=#{options[:gir]}.gir --header=#{z=options[:gir].split("-")[0].downcase}.h --library #{options[:gir]} -o lib#{z}.so")
+end
+
+if options[:plugin]
+  secondary_arguments.insert(0, "--library #{options[:plugin]} -o lib#{options[:plugin].split("-")[0].downcase}.so")
+end
+
+src_dir = "./q_generated/#{File.basename($prog).split(".q")[0]}"
+defs = ""
+pkgs = $V_ARGV.join(" ").scan(/\-\-pkg (.*? |.*)/).flatten.each do |pk|
+  defs << "-D Q_PKG_" << pk.gsub(/\.|\-/,'_').upcase
+end
+cmd="valac #{defs} -o #{File.basename(reqs.uniq[0]).split(".q")[0]} #{vs=reqs.uniq.map do |f| vala_file(f) end.join(" ")} #{secondary_arguments.join(" ")}#{(options[:gir] || options[:plugin]) ? " -X -fPIC -X -shared" : ""} --vapidir #{File.dirname(__FILE__)}/../lib/q/vapi".strip
+cmd = "" if options[:p]
+_in = vala_file(ARGV.last)
+_in = vala_file("#{Dir.getwd}/.e.q") if options[:inline]
+STDOUT.puts open(_in).read if options[:p]
+if options[:compile]
+  STDOUT.puts "\e[1m\e[35m"+cmd+"\e[0m"
+  exit(1) unless system(cmd)
+  system "rm -rf q_generated/#{File.basename($prog).split(".q")[0]}" if options[:remove]
+
+ 
+  if options[:gir]
+    [BUILD_PATH, BUILD_GIR_PATH, BUILD_TYPELIB_PATH, BUILD_LIB_PATH, BUILD_VAPI_PATH, BUILD_INCLUDE_PATH, BUILD_PC_PATH].each do |pth|
+      system "mkdir -p #{pth}"
+    end
+    
+    cmd_gir = "g-ir-compiler --shared-library=#{q=options[:gir].split("-")[0].downcase} #{options[:gir]}.gir -o #{options[:gir]}.typelib" 
+    STDOUT.puts "\e[1m\e[35m"+cmd_gir+"\e[0m"
+    exit(1) unless system(cmd_gir)
+    cmd+="\n"+cmd_gir
+    system "mv #{options[:gir]}.typelib #{BUILD_TYPELIB_PATH}/"
+    system "mv #{options[:gir]}.gir #{BUILD_GIR_PATH}/"
+    system "mv ./lib#{q}.so #{BUILD_LIB_PATH}/"
+    system "mv #{options[:gir]}.vapi #{BUILD_VAPI_PATH}/"
+    system "mv #{q}.h #{BUILD_INCLUDE_PATH}/"    
+    
+    pc = <<EOC
+prefix=#{BUILD_PATH}
+exec_prefix=${prefix}
+includedir=#{BUILD_INCLUDE_PATH}
+libdir=#{BUILD_LIB_PATH}
+
+Name: #{q}
+Description: The #{q} library
+Version: #{options[:gir].split("-").last}
+Cflags: -I${includedir}
+Libs: -L${libdir} -l#{q}    
+EOC
+
+    File.open(BUILD_PC_PATH+"/#{options[:gir]}.pc", "w") do |f| f.puts pc end
+    
+    puts "GIR creation completed.\nThe information files exist at: #{BUILD_PATH}"
+    
+    
+    File.open("test_#{q}_gir.rb", "w") do |f|
+      f.puts <<-EOC
+begin
+  require 'gir_ffi'
+rescue
+  require 'rubygems'
+  require 'gir_ffi'
+end
+
+GirFFI.setup '#{options[:gir].split("-")[0]}', '#{options[:gir].split("-")[1]}'
+p #{options[:gir].split("-")[0]}
+      EOC
+    end 
+  end
+  if options[:exec]
+    system "./#{File.basename(f.gsub(/\.q$/,''))}"
+  end
+end
+
+if File.exist?(src_dir)
+  File.open(cf=src_dir+"/compile.sh","w") do |f| f.puts(cmd) end
+  `chmod 755 #{cf}`
+end
+
+if options[:install_gir]
+  puts cmd = "mv #{BUILD_GIR_PATH}/*.gir #{TARGET_GIR_PATH}/"
+  system cmd
+  
+  puts cmd = "mv #{BUILD_TYPELIB_PATH}/*.typelib #{TARGET_TYPELIB_PATH}/"
+  system cmd
+  
+  puts cmd = "mv #{BUILD_VAPI_PATH}/*.vapi #{TARGET_VAPI_PATH}/"
+  system cmd
+  
+  puts cmd = "mv #{BUILD_LIB_PATH}/*.so* #{TARGET_LIB_PATH}/"
+  system cmd    
+  
+  puts cmd = "mv #{BUILD_INCLUDE_PATH}/*.h* #{TARGET_INCLUDE_PATH}/"
+  system cmd     
+  
+  puts cmd = "mv #{BUILD_PC_PATH}/*.pc* #{TARGET_PC_PATH}/"
+  system cmd     
+end
+
+

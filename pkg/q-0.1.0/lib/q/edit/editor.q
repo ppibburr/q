@@ -59,7 +59,7 @@ namespace module Q
         init_terminal()
         
         terminal.key_press_event.connect() do |event|
-          if ((event.key.state & Gtk.accelerator_get_default_mod_mask()) == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))
+          if (event.key.state == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))
             if event.key.keyval == Gdk::Key::V
               terminal.paste_clipboard()
               next true
@@ -82,7 +82,8 @@ namespace module Q
           terminal.set_color_background(c)
         end
         
-        key_press_event.connect() do |event|  
+        key_press_event.connect() do |event|
+        puts event.key.keyval
           if ((event.key.state & Gtk.accelerator_get_default_mod_mask()) == (Gdk::ModifierType::CONTROL_MASK | Gdk::ModifierType::SHIFT_MASK))          
             if event.key.keyval == Gdk::Key::Q
               close_all()
